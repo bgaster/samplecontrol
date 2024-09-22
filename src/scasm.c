@@ -142,7 +142,10 @@ typedef struct {
     sc_int num_operands_;
 } opcode;
 
-// instructions
+// individual instruction opcode
+
+// these must be kept in the same order as opcodes[] below, otherwise
+// directly lookup will value. i.e. enum is used to index into opcodes[].
 enum {
     MOV, MOVL, 
     JMP, JMPNE, NOP, 
@@ -172,6 +175,11 @@ sc_bool match_opcode(sc_char *op, opcode * dst_opcode) {
     return FALSE;
 }
 
+/**
+ * @brief print instruction to stdout
+ * 
+ * @param instruction to print.
+ */
 void print_instruction(instruction inst) {
     sc_print("   %s ", opcodes[inst.opcode_].str_);
     for (sc_int j = 0; j < inst.operand_count_; j++) {
@@ -180,6 +188,9 @@ void print_instruction(instruction inst) {
     }
 }
 
+/**
+ * @brief print all insructions to stdout
+ */
 void print_instructions() {
     for (sc_int i = 0; i < instruction_count; i++) {
         sc_print("%d", i);
@@ -194,12 +205,26 @@ void print_instructions() {
 
 #define LABEL_FORWARD -1
 
+/**
+ * @brief make label.
+ *
+ * @param name of label.
+ * @param offset of label, which can be LABEL_UNDEFINED.
+ * @return pointer to constructed label
+ */
 label* make_label(sc_char* l, sc_int loc) {
     label lab = {{l, 0}, loc};
     labels[label_count] = lab;
     return &labels[label_count++];
 }
 
+/**
+ * @brief is_label_defined.
+ *
+ * @param label to check is defined.
+ * @param location to return label if found.
+ * @return true if successful, otherwise false.
+ */
 sc_bool is_label_defined(sc_char* l, label** dst_label) {
     sc_int len = slen(l);
     for (sc_int i = 0; i < label_count; i++) {
