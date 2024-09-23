@@ -79,9 +79,26 @@ typedef struct {
     operand_option op_;
 } operand;
 
+// reserved register start at 192, through 255
+enum {
+    REG_SR = 192, 
+};
+
+typedef struct {
+    sc_char str_[MAX_OPCODE_SIZE+1];
+    sc_int reg_;
+} reserved_register;
+
+const reserved_register reserved_regs[] = { { "SR", REG_SR } };
+
 void print_operand(operand op) {
     if (op.type_ == OP_Reg) {
-        sc_print("R%d", op.op_.operand_);
+        if (op.op_.operand_ >= REG_SR) {
+            sc_print("%s", reserved_regs[op.op_.operand_ - REG_SR].str_);
+        }
+        else {
+            sc_print("R%d", op.op_.operand_);
+        }
     }
     else if (op.type_ == OP_Label) {
         sc_print("_%s (%d)", op.op_.label_->name_.str_, op.op_.label_->offset_);
@@ -175,7 +192,7 @@ enum {
     ADD, SUB, MUL, FTOI,
     ADDF, SUBF, MULF, ITOF,
     LDL, PUSH, POP,
-    SPAWN, START,
+    SPAWN, YIELD, START,
 };
 
 const opcode opcodes[] = { 
@@ -184,7 +201,7 @@ const opcode opcodes[] = {
     {"ADD", ADD, 3}, {"SUB", SUB, 3}, {"MUL", ADD, 3}, {"FTOI", FTOI, 2},
     {"ADDF", ADD, 3}, {"SUBF", SUBF, 3}, {"MULF", ADD, 3}, {"ITOF", ITOF, 2},
     {"LDL", LDL, 1}, {"PUSH", PUSH, 1}, {"POP", POP, 1},
-    {"SPAWN", SPAWN, 1}, {"START", START, 0},
+    {"SPAWN", SPAWN, 2}, {"YIELD", YIELD, 0}, {"START", START, 0},
  };
 
 sc_bool match_opcode(sc_char *op, opcode * dst_opcode) {
@@ -206,7 +223,7 @@ sc_bool match_opcode(sc_char *op, opcode * dst_opcode) {
  * @param instruction to print.
  */
 void print_instruction(instruction inst) {
-    sc_print("   %s ", opcodes[inst.opcode_].str_);
+    sc_print("%s ", opcodes[inst.opcode_].str_);
     for (sc_int j = 0; j < inst.operand_count_; j++) {
         print_operand(inst.operands_[j]);
         sc_print(" ");
@@ -218,7 +235,7 @@ void print_instruction(instruction inst) {
  */
 void print_instructions() {
     for (sc_int i = 0; i < instruction_count; i++) {
-        sc_print("%d", i);
+        sc_print("%d\t", i);
         print_instruction(instructions[i]);
         sc_print("\n");
     }
@@ -512,6 +529,19 @@ sc_bool parse_operand(operand* dst_operand) {
     // while (token != ' ' && token != 0 && token != '\n') {
         if (token == 'R') {
             // register
+            // check special registers
+            if (*src_buffer == 'S' && *(src_buffer+1) == 'R') {
+                operand_option option;
+                option.operand_ = REG_SR;
+                operand op = {OP_Reg, option};
+                if (dst_operand) {
+                    *dst_operand = op;
+                }
+                src_buffer = src_buffer+2;
+                token = *src_buffer;
+                return TRUE;
+            }
+
             sc_char digits[MAX_DIGITS_IN_NUM];
             sc_int count = 0;
             token = *src_buffer++;
@@ -599,6 +629,7 @@ sc_bool parse_instruction() {
         sc_int operand_count = 0;
         while (operand_count < dst_opcode.num_operands_ && token != '\n') {
             if (!parse_operand(&gen_operands[operand_count++])) {
+                sc_print("line(%d) %s %d\n", line, op, operand_count);
                 sc_error("ERROR: line(%d) invalid number of operands\n", line);
                 return FALSE;
             }
@@ -618,13 +649,13 @@ sc_bool parse_instruction() {
                 return FALSE;
             }            
         }
-        else if (scmp(op, "MOV", 3)) {
+        else if (scmp(op, "MOV", 3) || scmp(op, "SPAWN", 5)) {
             if (gen_operands[0].type_ != OP_Reg || gen_operands[1].type_ == OP_Lit) {
                 sc_error("ERROR: line(%d) invalid operand(s) for %s\n", line, op);
                 return FALSE;
             }
         } 
-        else if (scmp(op, "JMP", 3) || scmp(op, "JMPNE", 3) || scmp(op, "SPAWN", 5)) {
+        else if (scmp(op, "JMP", 3) || scmp(op, "JMPNE", 3)) {
             if (gen_operands[0].type_ == OP_Lit) {
                 sc_error("ERROR: line(%d) invalid operand(s) for %s\n", line, op);
                 return FALSE;

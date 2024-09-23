@@ -6,12 +6,13 @@ _bar:
     MOVL R0 #20
     MOVL R2 #3.455
     FTOI R4 R2
-    ADD  R3 R1 R0
+    ADD  R3 R1 RSR
+    YIELD
     JMP _exit
     JMP _bar
 _exit:
     NOP
 
 @entry
-    SPAWN _foo
+    SPAWN RSR _foo
     START       ; transfer control to the scheduler
