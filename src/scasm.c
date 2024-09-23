@@ -27,7 +27,13 @@
 // max 4K labels
 #define MAX_LABELS 1024 * 4
 
+#define MAX_LABEL_LENGTH 256
+
 #define MAX_REGISTER_NUM 255
+
+#define MAX_OPCODE_SIZE 5
+
+#define MAX_TOPLEVEL_SIZE 10
 
 //-----------------------------------------------------------------------------------------------
 // some useful macros
@@ -106,6 +112,21 @@ instruction make_instruction(sc_int opcode, sc_int operand_count, operand* opera
     return i;
 }
 
+enum { TL_Stream, TL_Task };
+
+// typedef struct {
+//     string name_;
+//     sc_ushort code_offset_;
+// } task;
+
+// typedef struct {
+//     string name_;
+// } stream;
+
+// typedef struct {
+
+// } toplevel;
+
 //-----------------------------------------------------------------------------------------------
 // Globals
 //-----------------------------------------------------------------------------------------------
@@ -113,6 +134,10 @@ instruction make_instruction(sc_int opcode, sc_int operand_count, operand* opera
 static sc_int token;
 static sc_char* src_buffer;
 static sc_uint line = 1;
+static sc_char label_prefix[MAX_LABEL_LENGTH] = { 0 };
+
+#define ENTRY_NOTDEFINED -1
+static sc_int entry_point = ENTRY_NOTDEFINED;
 
 // instructions
 static instruction instructions[MAX_INSRUCTIONS];
@@ -134,8 +159,6 @@ static sc_ushort label_count = 0;
 // OPCODES
 //-----------------------------------------------------------------------------------------------
 
-#define MAX_OPCODE_SIZE 5
-
 typedef struct {
     sc_char str_[MAX_OPCODE_SIZE+1];
     sc_int opcode_;
@@ -152,6 +175,7 @@ enum {
     ADD, SUB, MUL, FTOI,
     ADDF, SUBF, MULF, ITOF,
     LDL, PUSH, POP,
+    SPAWN, START,
 };
 
 const opcode opcodes[] = { 
@@ -160,6 +184,7 @@ const opcode opcodes[] = {
     {"ADD", ADD, 3}, {"SUB", SUB, 3}, {"MUL", ADD, 3}, {"FTOI", FTOI, 2},
     {"ADDF", ADD, 3}, {"SUBF", SUBF, 3}, {"MULF", ADD, 3}, {"ITOF", ITOF, 2},
     {"LDL", LDL, 1}, {"PUSH", PUSH, 1}, {"POP", POP, 1},
+    {"SPAWN", SPAWN, 1}, {"START", START, 0},
  };
 
 sc_bool match_opcode(sc_char *op, opcode * dst_opcode) {
@@ -282,6 +307,17 @@ sc_bool read(const char * filename) {
 //-----------------------------------------------------------------------------------------------
 // Parsering functions
 //-----------------------------------------------------------------------------------------------
+
+/**
+ * @brief strip whitespace from source buffer
+ * 
+ */
+void strip_whitespace() {
+    while ((token == ' ' || token == '\t') && token != 0 && token != '\n') {
+        token = *src_buffer++; 
+    }
+}
+
 
 /**
  * @brief parse unsigned int.
@@ -413,6 +449,8 @@ sc_bool parse_literal(sc_ushort * lit_offset) {
  */
 sc_bool parse_label(label **dst_label, sc_bool should_be_definition) {
     // parse literal
+    strip_whitespace();
+
     sc_char * label_start = src_buffer;
 
     while (token != ' ' && token != 0 && token != '\n' & token != ':') {
@@ -423,11 +461,12 @@ sc_bool parse_label(label **dst_label, sc_bool should_be_definition) {
         token = *src_buffer++;
     }
 
-    sc_size_t label_length = (src_buffer-1) - label_start;
+    sc_int prefix_length = slen(label_prefix);
+    sc_size_t label_length = prefix_length + (src_buffer-1) - label_start;
     sc_char * lab = sc_malloc(label_length+1 * sizeof(sc_char));
-    mcopy(label_start, lab, label_length);
+    mcopy(label_prefix, lab, prefix_length);
+    mcopy(label_start, lab+prefix_length, label_length);
     lab[label_length] = '\0';
-
     label* dst;
 
     if (should_be_definition) {
@@ -462,12 +501,12 @@ sc_bool parse_label(label **dst_label, sc_bool should_be_definition) {
     return TRUE;
 }
 
-void strip_whitespace() {
-    while ((token == ' ' || token == '\t') && token != 0 && token != '\n') {
-        token = *src_buffer++; 
-    }
-}
-
+/**
+ * @brief parse instruction operand
+ * 
+ * @param pointer to where parsed operand will be placed (can be null) 
+ * @return true if successful, otherwise false.
+ */
 sc_bool parse_operand(operand* dst_operand) {
     strip_whitespace();
     // while (token != ' ' && token != 0 && token != '\n') {
@@ -534,6 +573,13 @@ sc_bool parse_operand(operand* dst_operand) {
     return FALSE;
 }
 
+/**
+ * @brief parse an instruction
+ * 
+ * if success, then the pasred instruction is pushed on to the list of instructions
+ * 
+ * @return true if successful, otherwise false.
+ */
 sc_bool parse_instruction() {
     sc_char op[MAX_OPCODE_SIZE+1];
     sc_int op_length = 0;
@@ -578,7 +624,7 @@ sc_bool parse_instruction() {
                 return FALSE;
             }
         } 
-        else if (scmp(op, "JMP", 3) || scmp(op, "JMPNE", 3)) {
+        else if (scmp(op, "JMP", 3) || scmp(op, "JMPNE", 3) || scmp(op, "SPAWN", 5)) {
             if (gen_operands[0].type_ == OP_Lit) {
                 sc_error("ERROR: line(%d) invalid operand(s) for %s\n", line, op);
                 return FALSE;
@@ -605,6 +651,8 @@ sc_bool parse_instruction() {
     return TRUE;
 }
 
+
+
 /**
  * @brief parse input stream.
  *
@@ -620,6 +668,41 @@ sc_bool parse() {
             // skip comments
             while (*src_buffer != 0 && *src_buffer != '\n') {
                 src_buffer++;
+            }
+        }
+        else if (token == '@') {
+            // toplevel construct (e.g. stream, task, etc)
+            sc_char tl[MAX_TOPLEVEL_SIZE+1];
+            sc_int tl_length = 0;
+            token = *src_buffer++;
+            while (token != ' ' && token != 0 && token != '\n' && tl_length <= MAX_TOPLEVEL_SIZE) {
+                tl[tl_length++] = token;
+                token = *src_buffer++;
+            }
+            tl[tl_length] = '\0';
+            if (scmp(tl, "task", 4)) {
+                label* dst_label;
+                if (parse_label(&dst_label, TRUE)) {
+                    sc_int len = slen(dst_label->name_.str_);
+                    mcopy(dst_label->name_.str_, label_prefix, len);
+                }
+                else {
+                    sc_error("ERROR: line(%d) expected label\n", line);
+                    return FALSE;
+                }
+            }
+            else if (scmp(tl, "entry", 4)) {
+                // check that there is only one entry !!
+                if (entry_point != ENTRY_NOTDEFINED) {
+                    sc_error("ERROR: line(%d) multiple entry points\n", line);
+                    return FALSE;
+                }
+                label_prefix[0] = '\0';
+                entry_point = instruction_count;
+            }
+            else {
+                sc_error("ERROR: line(%d) unknown toplevel definition\n", line);
+                return FALSE;
             }
         }
         else if (token == '#') {
@@ -649,7 +732,6 @@ sc_bool parse() {
             // process line
             line++;
         }
-        
     }
 
     DEBUG("end\n");
@@ -680,7 +762,10 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    // dump what we have created
     print_instructions();
+    // print_constants();
+
 
     return 0;
 }
