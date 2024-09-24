@@ -79,26 +79,136 @@ typedef struct {
     operand_option op_;
 } operand;
 
-// reserved register start at 192, through 255
+// registers
+// General purpose 0   - 127 (labeled R0 ... R127)
+// Streams         128 - 159 (labeled S0 ... S31)
+// Generators      160 - 191 (labeled G0 ... G31)
+// Consumers       192 - 223 (labeled C0 ... C31)
+// Sample rate     224       (labeled SR)     
 enum {
-    REG_SR = 192, 
+    REG_0=0, REG_1, REG_2, REG_3, REG_4, REG_5, REG_6, REG_7, REG_8, 
+    REG_9, REG_10, REG_11, REG_12, REG_13, REG_14, REG_15, REG_16, 
+    REG_17, REG_18, REG_19, REG_20, REG_21, REG_22, REG_23, REG_24, 
+    REG_25, REG_26, REG_27, REG_28, REG_29, REG_30, REG_31, REG_32, 
+    REG_33, REG_34, REG_35, REG_36, REG_37, REG_38, REG_39, REG_40, 
+    REG_41, REG_42, REG_43, REG_44, REG_45, REG_46, REG_47, REG_48, 
+    REG_49, REG_50, REG_51, REG_52, REG_53, REG_54, REG_55, REG_56, 
+    REG_57, REG_58, REG_59, REG_60, REG_61, REG_62, REG_63, REG_64, 
+    REG_65, REG_66, REG_67, REG_68, REG_69, REG_70, REG_71, REG_72, 
+    REG_73, REG_74, REG_75, REG_76, REG_77, REG_78, REG_79, REG_80, 
+    REG_81, REG_82, REG_83, REG_84, REG_85, REG_86, REG_87, REG_88, 
+    REG_89, REG_90, REG_91, REG_92, REG_93, REG_94, REG_95, REG_96, 
+    REG_97, REG_98, REG_99, REG_100, REG_101, REG_102, REG_103, REG_104, 
+    REG_105, REG_106, REG_107, REG_108, REG_109, REG_110, REG_111, REG_112, 
+    REG_113, REG_114, REG_115, REG_116, REG_117, REG_118, REG_119, REG_120, 
+    REG_121, REG_122, REG_123, REG_124, REG_125, REG_126, REG_127,
+
+    REG_S0, REG_S1, REG_S2, REG_S3, REG_S4, REG_S5, REG_S6, REG_S7, 
+    REG_S8, REG_S9, REG_S10, REG_S11, REG_S12, REG_S13, REG_S14, REG_S15, 
+    REG_S16, REG_S17, REG_S18, REG_S19, REG_S20, REG_S21, REG_S22, REG_S23, 
+    REG_S24, REG_S25, REG_S26, REG_S27, REG_S28, REG_S29, REG_S30, REG_S31,
+
+    REG_G0, REG_G1, REG_G2, REG_G3, REG_G4, REG_G5, REG_G6, REG_G7, 
+    REG_G8, REG_G9, REG_G10, REG_G11, REG_G12, REG_G13, REG_G14, REG_G15, 
+    REG_G16, REG_G17, REG_G18, REG_G19, REG_G20, REG_G21, REG_G22, REG_G23, 
+    REG_G24, REG_G25, REG_G26, REG_G27, REG_G28, REG_G29, REG_G30, REG_G31,
+
+    REG_C0, REG_C1, REG_C2, REG_C3, REG_C4, REG_C5, REG_C6, REG_C7, 
+    REG_C8, REG_C9, REG_C10, REG_C11, REG_C12, REG_C13, REG_C14, REG_C15, 
+    REG_C16, REG_C17, REG_C18, REG_C19, REG_C20, REG_C21, REG_C22, REG_C23, 
+    REG_C24, REG_C25, REG_C26, REG_C27, REG_C28, REG_C29, REG_C30, REG_C31,
+
+    REG_SR, 
 };
+
+sc_bool is_general_reg(sc_uint reg) {
+    return reg <= REG_127 ? TRUE : FALSE;
+}
+
+sc_bool is_stream_reg(sc_uint reg) {
+    return REG_S0 <= reg && reg <= REG_S31 ? TRUE : FALSE;
+}
+
+sc_bool is_generator_reg(sc_uint reg) {
+    return REG_G0 <= reg && reg <= REG_G31 ? TRUE : FALSE;
+}
+
+sc_bool is_consumer_reg(sc_uint reg) {
+    return REG_C0 <= reg && reg <= REG_C31 ? TRUE : FALSE;
+}
 
 typedef struct {
     sc_char str_[MAX_OPCODE_SIZE+1];
     sc_int reg_;
 } reserved_register;
 
-const reserved_register reserved_regs[] = { { "SR", REG_SR } };
+const reserved_register reserved_regs[] = { 
+    {"R0", REG_0}, {"R1", REG_1}, {"R2", REG_2}, {"R3", REG_3}, 
+    {"R4", REG_4}, {"R5", REG_5}, {"R6", REG_6}, {"R7", REG_7}, 
+    {"R8", REG_8}, {"R9", REG_9}, {"R10", REG_10}, {"R11", REG_11}, 
+    {"R12", REG_12}, {"R13", REG_13}, {"R14", REG_14}, {"R15", REG_15}, 
+    {"R16", REG_16}, {"R17", REG_17}, {"R18", REG_18}, {"R19", REG_19}, 
+    {"R20", REG_20}, {"R21", REG_21}, {"R22", REG_22}, {"R23", REG_23}, 
+    {"R24", REG_24}, {"R25", REG_25}, {"R26", REG_26}, {"R27", REG_27}, 
+    {"R28", REG_28}, {"R29", REG_29}, {"R30", REG_30}, {"R31", REG_31}, 
+    {"R32", REG_32}, {"R33", REG_33}, {"R34", REG_34}, {"R35", REG_35}, 
+    {"R36", REG_36}, {"R37", REG_37}, {"R38", REG_38}, {"R39", REG_39}, 
+    {"R40", REG_40}, {"R41", REG_41}, {"R42", REG_42}, {"R43", REG_43}, 
+    {"R44", REG_44}, {"R45", REG_45}, {"R46", REG_46}, {"R47", REG_47}, 
+    {"R48", REG_48}, {"R49", REG_49}, {"R50", REG_50}, {"R51", REG_51}, 
+    {"R52", REG_52}, {"R53", REG_53}, {"R54", REG_54}, {"R55", REG_55}, 
+    {"R56", REG_56}, {"R57", REG_57}, {"R58", REG_58}, {"R59", REG_59}, 
+    {"R60", REG_60}, {"R61", REG_61}, {"R62", REG_62}, {"R63", REG_63}, 
+    {"R64", REG_64}, {"R65", REG_65}, {"R66", REG_66}, {"R67", REG_67}, 
+    {"R68", REG_68}, {"R69", REG_69}, {"R70", REG_70}, {"R71", REG_71}, 
+    {"R72", REG_72}, {"R73", REG_73}, {"R74", REG_74}, {"R75", REG_75}, 
+    {"R76", REG_76}, {"R77", REG_77}, {"R78", REG_78}, {"R79", REG_79}, 
+    {"R80", REG_80}, {"R81", REG_81}, {"R82", REG_82}, {"R83", REG_83}, 
+    {"R84", REG_84}, {"R85", REG_85}, {"R86", REG_86}, {"R87", REG_87}, 
+    {"R88", REG_88}, {"R89", REG_89}, {"R90", REG_90}, {"R91", REG_91}, 
+    {"R92", REG_92}, {"R93", REG_93}, {"R94", REG_94}, {"R95", REG_95}, 
+    {"R96", REG_96}, {"R97", REG_97}, {"R98", REG_98}, {"R99", REG_99}, 
+    {"R100", REG_100}, {"R101", REG_101}, {"R102", REG_102}, {"R103", REG_103}, 
+    {"R104", REG_104}, {"R105", REG_105}, {"R106", REG_106}, {"R107", REG_107}, 
+    {"R108", REG_108}, {"R109", REG_109}, {"R110", REG_110}, {"R111", REG_111},
+    {"R112", REG_112}, {"R113", REG_113}, {"R114", REG_114}, {"R115", REG_115}, 
+    {"R116", REG_116}, {"R117", REG_117}, {"R118", REG_118}, {"R119", REG_119}, 
+    {"R120", REG_120}, {"R121", REG_121}, {"R122", REG_122}, {"R123", REG_123}, 
+    {"R124", REG_124}, {"R125", REG_125}, {"R126", REG_126}, {"R127", REG_127},
+    
+    {"S0", REG_S0}, {"S1", REG_S1}, {"S2", REG_S2}, {"S3", REG_S3}, 
+    {"S4", REG_S4}, {"S5", REG_S5}, {"S6", REG_S6}, {"S7", REG_S7}, 
+    {"S8", REG_S8}, {"S9", REG_S9}, {"S10", REG_S10}, {"S11", REG_S11}, 
+    {"S12", REG_S12}, {"S13", REG_S13}, {"S14", REG_S14}, {"S15", REG_S15}, 
+    {"S16", REG_S16}, {"S17", REG_S17}, {"S18", REG_S18}, {"S19", REG_S19}, 
+    {"S20", REG_S20}, {"S21", REG_S21}, {"S22", REG_S22}, {"S23", REG_S23}, 
+    {"S24", REG_S24}, {"S25", REG_S25}, {"S26", REG_S26}, {"S27", REG_S27}, 
+    {"S28", REG_S28}, {"S29", REG_S29}, {"S30", REG_S30}, {"S31", REG_S31},
+
+    {"G0", REG_G0}, {"G1", REG_G1}, {"G2", REG_G2}, {"G3", REG_G3}, 
+    {"G4", REG_G4}, {"G5", REG_G5}, {"G6", REG_G6}, {"G7", REG_G7}, 
+    {"G8", REG_G8}, {"G9", REG_G9}, {"G10", REG_G10}, {"G11", REG_G11}, 
+    {"G12", REG_G12}, {"G13", REG_G13}, {"G14", REG_G14}, {"G15", REG_G15}, 
+    {"G16", REG_G16}, {"G17", REG_G17}, {"G18", REG_G18}, {"G19", REG_G19}, 
+    {"G20", REG_G20}, {"G21", REG_G21}, {"G22", REG_G22}, {"G23", REG_G23}, 
+    {"G24", REG_G24}, {"G25", REG_G25}, {"G26", REG_G26}, {"G27", REG_G27}, 
+    {"G28", REG_G28}, {"G29", REG_G29}, {"G30", REG_G30}, {"G31", REG_G31}, 
+
+    {"C0", REG_C0}, {"C1", REG_C1}, {"C2", REG_C2}, {"C3", REG_C3}, 
+    {"C4", REG_C4}, {"C5", REG_C5}, {"C6", REG_C6}, {"C7", REG_C7}, 
+    {"C8", REG_C8}, {"C9", REG_C9}, {"C10", REG_C10}, {"C11", REG_C11}, 
+    {"C12", REG_C12}, {"C13", REG_C13}, {"C14", REG_C14}, {"C15", REG_C15}, 
+    {"C16", REG_C16}, {"C17", REG_C17}, {"C18", REG_C18}, {"C19", REG_C19}, 
+    {"C20", REG_C20}, {"C21", REG_C21}, {"C22", REG_C22}, {"C23", REG_C23}, 
+    {"C24", REG_C24}, {"C25", REG_C25}, {"C26", REG_C26}, {"C27", REG_C27}, 
+    {"C28", REG_C28}, {"C29", REG_C29}, {"C30", REG_C30}, {"C31", REG_C31},  
+
+    { "SR", REG_SR },
+};
 
 void print_operand(operand op) {
     if (op.type_ == OP_Reg) {
-        if (op.op_.operand_ >= REG_SR) {
-            sc_print("%s", reserved_regs[op.op_.operand_ - REG_SR].str_);
-        }
-        else {
-            sc_print("R%d", op.op_.operand_);
-        }
+        sc_print("%s", reserved_regs[op.op_.operand_].str_);
     }
     else if (op.type_ == OP_Label) {
         sc_print("_%s (%d)", op.op_.label_->name_.str_, op.op_.label_->offset_);
@@ -145,6 +255,12 @@ enum { TL_Stream, TL_Task };
 // } toplevel;
 
 //-----------------------------------------------------------------------------------------------
+// Streams
+//-----------------------------------------------------------------------------------------------
+
+
+
+//-----------------------------------------------------------------------------------------------
 // Globals
 //-----------------------------------------------------------------------------------------------
 
@@ -169,6 +285,7 @@ static label labels[MAX_LABELS];
 static sc_ushort label_count = 0;
 
 #define push_literal(l) (literals[(sc_int)literal_count]=*((sc_uint*)&l), literal_count++)
+#define get_literal(offset) (literals[(sc_int)offset])
 
 #define push_instruction(i) (instructions[instruction_count++] = i)
 
@@ -187,25 +304,42 @@ typedef struct {
 // these must be kept in the same order as opcodes[] below, otherwise
 // directly lookup will value. i.e. enum is used to index into opcodes[].
 enum {
-    MOV, MOVL, 
-    JMP, JMPNE, NOP, 
+    MOV, MOVL, LDS, STS,
+    JMP, JMPNE, NOP, CMP, 
     ADD, SUB, MUL, FTOI,
     ADDF, SUBF, MULF, ITOF,
     LDL, PUSH, POP,
     SPAWN, YIELD, START,
+
+    // now instructions that are not in assembler, but are in the binary format
+    // mostly for supporting streams
+    STREAM, SETSF, SETSC,
+    ATTACH, 
 };
 
 const opcode opcodes[] = { 
-    { "MOV", MOV, 2}, { "MOVL", MOVL, 2}, 
-    { "JMP", JMP, 1}, {"JMPNE", JMPNE, 1}, {"NOP", NOP, 0}, 
+    { "MOV", MOV, 2}, { "MOVL", MOVL, 2}, { "LDS", LDS, 2}, { "STS", STS, 2},
+    { "JMP", JMP, 1}, {"JMPNE", JMPNE, 1}, {"NOP", NOP, 0}, {"CMP", CMP, 2},
     {"ADD", ADD, 3}, {"SUB", SUB, 3}, {"MUL", ADD, 3}, {"FTOI", FTOI, 2},
     {"ADDF", ADD, 3}, {"SUBF", SUBF, 3}, {"MULF", ADD, 3}, {"ITOF", ITOF, 2},
     {"LDL", LDL, 1}, {"PUSH", PUSH, 1}, {"POP", POP, 1},
     {"SPAWN", SPAWN, 2}, {"YIELD", YIELD, 0}, {"START", START, 0},
+
+    // stream insructions
+    {"STREAM", STREAM, 4}, {"SETSF", SETSF, 2}, {"SETSC", SETSC, 2}, 
+    {"ATTACH", ATTACH, 3},
  };
 
 sc_bool match_opcode(sc_char *op, opcode * dst_opcode) {
     sc_int len = slen(op);
+
+    // return false in the case that it is a stream instruction
+    // these are handled seperatly and not allowed to appear in standard
+    // instruction stream for assembler
+    if (scmp("STREAM", op, len) || scmp("ATTACH", op, len)) {
+        return FALSE;
+    }
+
     for (sc_int i = 0; i < sizeof(opcodes) / sizeof(opcode); i++) {
         if (scmp(opcodes[i].str_, op, len)) {
             if (dst_opcode) {
@@ -396,6 +530,8 @@ sc_float parse_float(const char *str, sc_float *dst) {
  * @return true if successful, otherwise false.
  */
 sc_bool parse_literal(sc_ushort * lit_offset) {
+    strip_whitespace();
+
      // parse literal
     token = *src_buffer++;
     sc_bool is_negative = FALSE;
@@ -529,19 +665,6 @@ sc_bool parse_operand(operand* dst_operand) {
     // while (token != ' ' && token != 0 && token != '\n') {
         if (token == 'R') {
             // register
-            // check special registers
-            if (*src_buffer == 'S' && *(src_buffer+1) == 'R') {
-                operand_option option;
-                option.operand_ = REG_SR;
-                operand op = {OP_Reg, option};
-                if (dst_operand) {
-                    *dst_operand = op;
-                }
-                src_buffer = src_buffer+2;
-                token = *src_buffer;
-                return TRUE;
-            }
-
             sc_char digits[MAX_DIGITS_IN_NUM];
             sc_int count = 0;
             token = *src_buffer++;
@@ -559,10 +682,74 @@ sc_bool parse_operand(operand* dst_operand) {
             sc_uint value;
             parse_unsigned_int(digits, &value);
 
-            if (value > MAX_REGISTER_NUM) {
+            if (!is_general_reg(value)) {
                 sc_error("ERROR: line(%d) invalid register number\n", line);
                 return FALSE;
             }
+            operand_option option;
+            option.operand_ = (sc_uchar)value;
+            operand op = {OP_Reg, option};
+            if (dst_operand) {
+                *dst_operand = op;
+            }
+            return TRUE;
+        }
+        else if (token == 'S' && *src_buffer == 'R') {
+                sc_print("in here\n");
+                operand_option option;
+                option.operand_ = REG_SR;
+                operand op = {OP_Reg, option};
+                if (dst_operand) {
+                    *dst_operand = op;
+                }
+                src_buffer++;
+                token = *src_buffer++;
+                return TRUE;
+        }
+        else if (token == 'S' || token == 'G' || token == 'C') {
+            // stream, generator, or consumer reg
+            sc_char reg_token = token;
+            sc_char digits[MAX_DIGITS_IN_NUM];
+            sc_int count = 0;
+            token = *src_buffer++;
+
+            while (token != ' ' && token != 0 && token != '\n' && is_digit(token)) {
+                digits[count++] = token;
+                token = *src_buffer++;
+            }
+
+            if (count == 0) {
+                sc_error("ERROR: line(%d) invalid register\n", line);
+                return FALSE;
+            }
+            
+            sc_uint value;
+            parse_unsigned_int(digits, &value);
+            if (reg_token == 'S') { 
+                value = value + REG_S0;
+
+                if (!is_stream_reg(value)) {
+                    sc_error("ERROR: line(%d) invalid register number\n", line);
+                    return FALSE;
+                }
+            }
+            else if (reg_token == 'G') {
+                value = value + REG_G0;
+
+                if (!is_generator_reg(value)) {
+                    sc_error("ERROR: line(%d) invalid register number\n", line);
+                    return FALSE;
+                }
+            }
+            else {
+                value = value + REG_C0;
+
+                if (!is_consumer_reg(value)) {
+                    sc_error("ERROR: line(%d) invalid register number\n", line);
+                    return FALSE;
+                }
+            }
+
             operand_option option;
             option.operand_ = (sc_uchar)value;
             operand op = {OP_Reg, option};
@@ -661,6 +848,20 @@ sc_bool parse_instruction() {
                 return FALSE;
             }
         }
+        else if (scmp(op, "LDS", 3)) {
+            if (gen_operands[0].type_ != OP_Reg || 
+                gen_operands[1].type_ != OP_Reg || !is_stream_reg(gen_operands[1].op_.operand_)) {
+                sc_error("ERROR: line(%d) invalid operand(s) for %s\n", line, op);
+                return FALSE;
+            }
+        }
+        else if (scmp(op, "STS", 3)) {
+            if (gen_operands[1].type_ != OP_Reg || 
+                gen_operands[0].type_ != OP_Reg || !is_stream_reg(gen_operands[0].op_.operand_)) {
+                sc_error("ERROR: line(%d) invalid operand(s) for %s\n", line, op);
+                return FALSE;
+            }
+        }
         else {
             // all other instructions take only registers as arguments
             for (sc_int i = 0; i < operand_count; i++) {
@@ -682,6 +883,161 @@ sc_bool parse_instruction() {
     return TRUE;
 }
 
+/**
+ * @brief parse @stream.
+ *
+ */
+sc_bool parse_stream() {
+    strip_whitespace();
+
+    operand stream_reg;
+    if (!parse_operand(&stream_reg)) {    
+        sc_error("ERROR: line(%d) expected stream register\n", line);
+        return FALSE;
+    }
+
+    if (stream_reg.type_ != OP_Reg || !is_stream_reg(stream_reg.op_.operand_)) {
+        sc_error("ERROR: line(%d) expected stream register\n", line);
+        return FALSE;
+    }
+
+    sc_ushort lit_size_offset;
+    if (!parse_literal(&lit_size_offset)) {
+        sc_error("ERROR: line(%d) expected size\n", line);
+        return FALSE;
+    }
+
+    sc_int lit = get_literal(lit_size_offset);
+    if (lit != 8 && lit != 16 && lit != 32) {
+        sc_error("ERROR: line(%d) unexpected size %d\n", line, lit);
+        return FALSE;        
+    }
+    operand size_operand;
+    size_operand.type_ = OP_Lit;
+    size_operand.op_.literal_ = lit_size_offset;
+
+    strip_whitespace();
+    operand rate_operand;
+    if (token == 'S' && *src_buffer == 'R') {
+        rate_operand.type_ = OP_Reg;
+        rate_operand.op_.operand_ = REG_SR;
+        src_buffer++;
+        token = *src_buffer++;
+    }
+    else {   
+        sc_ushort lit_rate_offset;
+        if (!parse_literal(&lit_rate_offset)) {
+            sc_error("ERROR: line(%d) expected rate\n", line);
+            return FALSE;
+        }
+        rate_operand.type_ = OP_Lit;
+        rate_operand.op_.literal_ = lit_rate_offset;
+    }    
+
+    strip_whitespace();
+    sc_ushort lit_continuous_offset;
+    if (!parse_literal(&lit_continuous_offset)) {
+        sc_error("ERROR: line(%d) expected continuous literal\n", line);
+        return FALSE;
+    }
+
+    lit = get_literal(lit_continuous_offset);
+    if (lit != 0 && lit != 1) {
+        sc_error("ERROR: line(%d) unexpected continuous %d\n", line, lit);
+        return FALSE;        
+    }
+    operand continuous_operand;
+    continuous_operand.type_ = OP_Lit;
+    continuous_operand.op_.literal_ = lit_continuous_offset;
+
+    operand operands[3];
+
+    // first stream create instruction
+    operands[0] = stream_reg;
+    operands[1] = size_operand;
+    instruction i = make_instruction(STREAM, 2, operands);
+    push_instruction(i);
+
+    // now set rate instruction
+    operands[0] = stream_reg;
+    operands[1] = size_operand;
+    i = make_instruction(SETSF, 2, operands);
+    push_instruction(i);
+
+    operands[0] = stream_reg;
+    operands[1] = continuous_operand;
+    i = make_instruction(SETSC, 2, operands);
+    push_instruction(i);
+
+    //@attach G1 S0 #128 
+
+//@stream S0 #32 SR continuous
+
+/*
+STREAM S0 32
+SETSF S0 SR
+SETSC S0 #1
+*/
+
+/*
+ATTACH G1 S0 #128
+*/
+
+
+    return TRUE;
+}
+
+/**
+ * @brief parse @attach.
+ *
+ */
+sc_bool parse_attach() {
+    strip_whitespace();
+
+    operand operand_one;
+    if (!parse_operand(&operand_one)) {    
+        sc_error("ERROR: line(%d) expected stream register\n", line);
+        return FALSE;
+    }
+
+    if (operand_one.type_ != OP_Reg || !(is_stream_reg(operand_one.op_.operand_) || 
+        is_generator_reg(operand_one.op_.operand_) || is_consumer_reg(operand_one.op_.operand_))) {
+        sc_error("ERROR: line(%d) expected stream register\n", line);
+        return FALSE;
+    }
+
+    operand operand_two;
+    if (!parse_operand(&operand_two)) {    
+        sc_error("ERROR: line(%d) expected stream register\n", line);
+        return FALSE;
+    }
+
+    if (operand_one.type_ != OP_Reg || !(is_stream_reg(operand_two.op_.operand_) || 
+        is_generator_reg(operand_two.op_.operand_) || is_consumer_reg(operand_two.op_.operand_))) {
+        sc_error("ERROR: line(%d) expected stream register\n", line);
+        return FALSE;
+    }
+
+    sc_ushort lit_size_offset;
+    if (!parse_literal(&lit_size_offset)) {
+        sc_error("ERROR: line(%d) expected size\n", line);
+        return FALSE;
+    }
+
+    operand operand_size;
+    operand_size.type_ = OP_Lit;
+    operand_size.op_.literal_ = lit_size_offset;
+
+    // emit ATTACH instruction
+    operand operands[3];
+    operands[0] = operand_one;
+    operands[1] = operand_two;
+
+    instruction i = make_instruction(ATTACH, 3, operands);
+    push_instruction(i);
+
+    return TRUE;
+}
 
 
 /**
@@ -703,6 +1059,9 @@ sc_bool parse() {
         }
         else if (token == '@') {
             // toplevel construct (e.g. stream, task, etc)
+            // reset label prefix...
+            label_prefix[0] = '\0';
+
             sc_char tl[MAX_TOPLEVEL_SIZE+1];
             sc_int tl_length = 0;
             token = *src_buffer++;
@@ -716,9 +1075,20 @@ sc_bool parse() {
                 if (parse_label(&dst_label, TRUE)) {
                     sc_int len = slen(dst_label->name_.str_);
                     mcopy(dst_label->name_.str_, label_prefix, len);
+                    label_prefix[len] = '\0';
                 }
                 else {
                     sc_error("ERROR: line(%d) expected label\n", line);
+                    return FALSE;
+                }
+            }
+            else if (scmp(tl, "stream", 6)) {
+                if (!parse_stream()) {
+                    return FALSE;
+                }
+            }
+            else if (scmp(tl, "attach", 6)) {
+                if (!parse_attach()) {
                     return FALSE;
                 }
             }
@@ -728,7 +1098,6 @@ sc_bool parse() {
                     sc_error("ERROR: line(%d) multiple entry points\n", line);
                     return FALSE;
                 }
-                label_prefix[0] = '\0';
                 entry_point = instruction_count;
             }
             else {
