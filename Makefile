@@ -15,11 +15,9 @@ ECHO = echo
 BUILD_DIR = ./build
 
 SCASM_SOURCES = 	src/scasm.c \
-					src/lexer.c \
 					src/util.c
 
-SCASM_HEADERS = 	include/lexer.h \
-					include/lexer.h
+SCASM_HEADERS = 	include/util.h 
 
 SCASM = scasm
 
