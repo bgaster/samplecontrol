@@ -32,19 +32,27 @@ SCDIS_SOURCES =		src/scdis.c \
 					src/sc_asmdis.c \
 					src/util.c
 
+SCEM_SOURCES =		src/scem.c \
+					src/console.c \
+					src/screen.c \
+					src/util.c
+
 SCASM_HEADERS = 	include/util.h 
 
 SCASM = scasm
 SCDIS = scdis
+SCEM  = scem
 
 SCASM_OBJECTS = $(addprefix $(BUILD_DIR)/,$(notdir $(SCASM_SOURCES:.c=.o)))
 SCDIS_OBJECTS = $(addprefix $(BUILD_DIR)/,$(notdir $(SCDIS_SOURCES:.c=.o)))
+SCEM_OBJECTS  = $(addprefix $(BUILD_DIR)/,$(notdir $(SCEM_SOURCES:.c=.o)))
 
 DEPS = $(addprefix $(BUILD_DIR)/,$(notdir $(SCASM_SOURCES:.c=.d)))
 DEPS += $(addprefix $(BUILD_DIR)/,$(notdir $(SCDIS_SOURCES:.c=.d)))
+DEPS += $(addprefix $(BUILD_DIR)/,$(notdir $(SCEM_SOURCES:.c=.d)))
 
 .PHONY: all
-all:: $(BUILD_DIR)/$(SCASM) $(BUILD_DIR)/$(SCDIS)
+all:: $(BUILD_DIR)/$(SCASM) $(BUILD_DIR)/$(SCDIS) $(BUILD_DIR)/$(SCEM)
 
 $(DEPS):
 
@@ -52,6 +60,7 @@ $(DEPS):
 
 vpath %.c $(sort $(dir $(SCASM_SOURCES)))
 vpath %.c $(sort $(dir $(SCDIS_SOURCES)))
+vpath %.c $(sort $(dir $(SCEM_SOURCES)))
 vpath %.c src
 
 $(BUILD_DIR)/%.d: %.c
@@ -73,6 +82,11 @@ $(BUILD_DIR)/$(SCASM): $(SCASM_OBJECTS) Makefile
 $(BUILD_DIR)/$(SCDIS): $(SCDIS_OBJECTS) Makefile
 	$(ECHO) linking $<
 	$(CC) $(LDFLAGS) -o $@ $(SCDIS_OBJECTS)
+	$(ECHO) successs
+
+$(BUILD_DIR)/$(SCEM): $(SCEM_OBJECTS) Makefile
+	$(ECHO) linking $<
+	$(CC) $(LDFLAGS) -o $@ $(SCEM_OBJECTS)
 	$(ECHO) successs
 
 #######################################

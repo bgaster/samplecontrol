@@ -272,6 +272,10 @@ static sc_char label_prefix[MAX_LABEL_LENGTH] = { 0 };
 #define ENTRY_NOTDEFINED -1
 static sc_int entry_point = ENTRY_NOTDEFINED;
 
+static sc_uint device_capabilities = 0;
+#define USE_DEVICE_CONSOLE 0x1
+#define USE_DEVICE_SCREEN (0x1 << 1) 
+
 // instructions
 static instruction instructions[MAX_INSRUCTIONS];
 static sc_ushort instruction_count = 0;
@@ -294,10 +298,12 @@ sc_ushort push_string_literal(sc_char *src, sc_int len) {
     //sc_char* lit_pool = (sc_char*)literals;
     sc_ushort literal_count_tmp = literal_count;
 
-    mcopy(src, (sc_char*)literals, len);
+    mcopy(src, (sc_char*)(literals+literal_count), len);
 
+    *(((sc_char*)(literals+literal_count))+len) = '\0';
+    len = len + 1;
     // inc literal count, making sure to pad 4-byte alignment, if necessary
-    literal_count = literal_count + (len/4) + (len % 4 > 0 ? 1 : 0);
+    literal_count = literal_count + ((len+1)/4) + ((len+1) % 4 > 0 ? 1 : 0);
 
     return literal_count_tmp;
 }
@@ -430,7 +436,7 @@ sc_uint encode_operand(operand operand) {
         return operand.op_.operand_;
     }
     else if (operand.type_ == OP_Lit) {
-        return operand.op_.literal_;
+        return operand.op_.literal_ * sizeof(sc_int); // convert to byte offsets
     }
     else {
         return operand.op_.label_->offset_;
@@ -442,26 +448,39 @@ sc_int encode_instruction(instruction inst) {
     i = inst.opcode_ << 24;
     sc_uint shift = 16;
 
-    for (sc_int j = 0; j < inst.operand_count_; j++) {
-        sc_uint o = encode_operand(inst.operands_[j]);
-        i |= (o & 0xFF) << shift;
-        shift = shift >> 1;
+    if (inst.operand_count_ > 0) {
+        sc_uint o = encode_operand(inst.operands_[0]);
+        i |= (o & 0xFF) << 16;
+
+        if (inst.operand_count_ > 1) {
+            o = encode_operand(inst.operands_[1]);
+            i |= (o & 0xFF) << 8;
+        }
+        
+        if (inst.operand_count_ > 2) {
+            o = encode_operand(inst.operands_[2]);
+            i |= (o & 0xFF);
+        }
     }
     
     return i;
 }
 
-void print_encode_instruction(sc_uint inst) {
+void print_encode_instruction(sc_uint inst, char* prefix) {
     sc_uint i = inst;
-    // if (inst == 83886080) {
-    //     sc_print("shifted = %u %zu\n", (JMPZ << 24) & 0xFF000000, ((i & 0xFF000000) >> 24) & 0xFF);
-    // }
     sc_uint opcode = (i >> 24) & 0xFF;
-    sc_print("%s\t", opcodes[opcode].str_);
-    sc_uint shift = 16;
-    for (int j = 0; j < opcodes[opcode].num_operands_; j++) {
-        sc_print("%u\t", (i >> shift) & 0xFF);
-        shift = shift >> 1;
+    sc_print("%s%s\t", prefix, opcodes[opcode].str_);
+
+    if (opcodes[opcode].num_operands_ > 0) {
+        sc_print("%u\t", (i >> 16) & 0xFF);
+        
+        if (opcodes[opcode].num_operands_ > 1) {
+            sc_print("%u\t", (i >> 8) & 0xFF);
+        }
+        
+        if (opcodes[opcode].num_operands_ > 2) {
+            sc_print("%u\t", i & 0xFF);
+        }
     }
     sc_print("\n");
 }
@@ -702,7 +721,7 @@ sc_bool parse_string_literal(sc_ushort * lit_offset) {
     strip_whitespace();
 
      // parse literal
-    token = *src_buffer++;
+    token = *src_buffer;
     
     sc_char * string_start = src_buffer;
 
@@ -1335,6 +1354,7 @@ sc_bool parse() {
                 if (!parse_console()) {
                     return FALSE;
                 }
+                device_capabilities |= USE_DEVICE_CONSOLE;
             } else {
                 sc_error("ERROR: line(%d) unknown device\n", line);
                 return FALSE;
@@ -1377,13 +1397,13 @@ sc_bool parse() {
 
 typedef struct {
     sc_uint magic_;
-    // add device section (capabilities)
+    sc_uint capabilities_;
+    sc_ushort entry_point_;
     sc_uint literals_start_;
     sc_ushort literals_length_;
     sc_uint code_start_;
     sc_ushort code_length_;
 } header ;
-
 
 sc_bool emit(const char* filename) {
     FILE *file = fopen(filename, "wb");
@@ -1396,6 +1416,8 @@ sc_bool emit(const char* filename) {
     sc_uint code_bytes = instruction_count * sizeof(sc_int);
     header my_header = {
         .magic_ = 0xDEADBEEF,
+        .capabilities_ = device_capabilities,
+        .entry_point_ = (sc_ushort)entry_point,
         .literals_start_ = sizeof(header),
         .literals_length_ = lit_bytes, // in bytes
         .code_start_ = sizeof(header) + lit_bytes,
@@ -1470,12 +1492,25 @@ sc_bool dis(char* filename) {
     }
 
     instruction_count = header_data.code_length_ / 4;
+    entry_point = header_data.entry_point_;
 
-    sc_print("sc = %d %d\n", literal_count, instruction_count);
+    //sc_print("sc = %d %d\n", literal_count, instruction_count);
+
+    // display capabilities
+    if (header_data.capabilities_ & USE_DEVICE_CONSOLE) {
+        sc_print("device .Console\n");
+    }
+    if (header_data.capabilities_ & USE_DEVICE_SCREEN) {
+        sc_print("requires device .Screen\n");
+    }
 
     for(sc_int i = 0; i < instruction_count; i++) {
         // sc_print("i = %u\n", encoded_instructions[i]);
-        print_encode_instruction(encoded_instructions[i]);
+        if (i == entry_point) {
+             sc_print("@entry\n");
+        }
+
+        print_encode_instruction(encoded_instructions[i], "\t");
     }
 
     return TRUE;
