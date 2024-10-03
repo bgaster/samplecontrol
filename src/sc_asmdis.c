@@ -721,24 +721,37 @@ sc_bool parse_string_literal(sc_ushort * lit_offset) {
     strip_whitespace();
 
      // parse literal
-    token = *src_buffer;
+    token = *src_buffer++;
     
     sc_char * string_start = src_buffer;
 
+    sc_char buffer[1024];
+    sc_int buffer_count = 0;
+
     while (token != '"' && token != 0 && token != '\n') {
+        //sc_print("%c (%c) ", token, *(src_buffer+1));
+        if (token == '\\' && *(src_buffer) == 'n') {
+            src_buffer++;
+            buffer[buffer_count++] = '\n';
+        }
+        else {
+            //sc_print("%c", *(src_buffer+1));
+            buffer[buffer_count++] = token;
+        }
         token = *src_buffer++;
     }
+    sc_print("\n");
 
     if (token != '"') {
             sc_error("ERROR: line(%d) invalid string literal\n", line);
             return FALSE;
     }
 
-    sc_size_t string_length =  (src_buffer-1) - string_start;
-    sc_char * string = sc_malloc(string_length * sizeof(sc_char));
-    mcopy(string_start, string, string_length); 
+    // sc_size_t string_length =  (src_buffer-1) - string_start;
+    // sc_char * string = sc_malloc(string_length * sizeof(sc_char));
+    // mcopy(string_start, string, string_length); 
 
-    sc_ushort lo = push_string_literal(string, string_length);
+    sc_ushort lo = push_string_literal(buffer, buffer_count);
 
     if (lit_offset) {
         *lit_offset = lo;
