@@ -5,7 +5,7 @@ AR = ar
 LD = gcc
 CFLAGS =  -I./include -D__DEBUG__=1 -D__ASSERT_LEVEL__=4
 
-LDFLAGS = 
+LDFLAGS = -L/opt/homebrew/Cellar/glfw/3.4/lib/
 
 ROOTDIR = ./
 
@@ -14,15 +14,23 @@ ECHO = echo
 
 BUILD_DIR = ./build
 
-
 # Desktop uses raylib for its screen and console devices
 RAYLIB_DIR = ../sc_screendevice/raylib
 RAYLIB_LIB_PATH = $(RAYLIB_DIR)/build/raylib
 RAYLIB_INCLUDE_PATH = $(RAYLIB_DIR)/build/raylib/include
-RAY_LINKCMDS =  -framework CoreVideo -framework OpenGL -framework IOKit \
+RAY_LINKCMDS =  -lraylib -framework CoreVideo -framework OpenGL -framework IOKit \
 				-framework Cocoa -framework Carbon  -lm -lpthread -ldl -lglfw3
 
+SDL_CFLAGS = -I/opt/homebrew/include/ -D_THREAD_SAFE
+SDL_LDFLAGS = -L/opt/homebrew/lib -lSDL2 -lSDL2_ttf 
+
 CFLAGS += -I$(RAYLIB_INCLUDE_PATH) -D__DESKTOP__
+
+CFLAGS += $(SDL_CFLAGS)
+
+LDFLAGS += -L$(RAYLIB_LIB_PATH) $(RAY_LINKCMDS)
+
+LDFLAGS += $(SDL_LDFLAGS)
 
 SCASM_SOURCES = 	src/scasm.c \
 					src/sc_asmdis.c \
@@ -35,9 +43,13 @@ SCDIS_SOURCES =		src/scdis.c \
 SCEM_SOURCES =		src/scem.c \
 					src/console.c \
 					src/screen.c \
-					src/util.c
+					src/util.c \
+					src/lfqueue.c
 
-SCASM_HEADERS = 	include/util.h 
+SCASM_HEADERS = 	include/util.h
+SCEM_HEADERS  = 	include/util.h \
+					include/lfqueue.h
+
 
 SCASM = scasm
 SCDIS = scdis

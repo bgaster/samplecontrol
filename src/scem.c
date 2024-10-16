@@ -11,6 +11,10 @@
 #include <util.h>
 #include <console.h>
 #include <screen.h>
+#include <lfqueue.h>
+#include <raylib.h>
+#include <time.h>
+#include <unistd.h>
 
 //-----------------------------------------------------------------------------------------------
 // limits
@@ -105,10 +109,11 @@ sc_bool is_consumer_reg(sc_uint reg) {
 // these must be kept in the same order as opcodes[] below, otherwise
 // directly lookup will value. i.e. enum is used to index into opcodes[].
 enum {
-    MOV, MOVL, READ, WRITE,
+    MOV, MOVL, SREAD, SWRITE, SREADY,
     JMP, JMPZ, JMPNZ, NOP, CMP, CALL, RET, HALT,
-    ADD, SUB, MUL, FTOI,
+    ADD, SUB, MUL, DIV, MOD, FTOI,
     ADDF, SUBF, MULF, ITOF,
+    SHIFTR, SHIFTL, AND, OR,
     LDL, PUSH, POP,
 
     // Loads          Stores      Size and Type
@@ -121,12 +126,21 @@ enum {
     SPAWN, YIELD, START,
 
     // external blocks, might not always be supported
-    CONSOLE,
+    CONSOLE, SCREEN, MOUSE,
 
     // now instructions that are not in assembler, but are in the binary format
     // mostly for supporting streams
     STREAM, SETSF, SETSC,
-    ATTACH, 
+    ATTACH, AWAIT,
+};
+
+// Console device
+#define CONSOLE_WRITE 0
+
+enum { 
+    SCREEN_RESIZE=0, SCREEN_PIXEL, SCREEN_FILL, SCREEN_RECT, 
+    SCREEN_BLIT, SCREEN_PALETTE, SCREEN_BEGIN, SCREEN_END, SCREEN_COLOUR,
+    SCREEN_MOVE,
 };
 
 //---------------------------------------------------------------------------------------------
@@ -148,52 +162,71 @@ static sc_ushort entry_point = 0;
 #define USE_DEVICE_SCREEN (0x1 << 1)
 static sc_uint device_capabilities = 0;
  
-static sc_uint registers[127] = {0};
-static sc_uchar flags = 0;
+static struct timespec start_time;
+
+static sc_uint running_queue = 0;
+
+// streams
+
+#define MAX_NUM_STREAMS 32
+#define STREAM_REG_INDEX(r) (r - REG_S0)
+#define GENERATOR_REG_INDEX(r) (r - REG_G0)
+
+static sc_queue * streams[MAX_NUM_STREAMS];
+
+#define MOUSE_GENERATOR 1
 
 // stacks
 
-static sc_uint* stacks[16];
-static sc_uint next_stack = 0;
-
 static sc_uint* current_stack;
+static sc_uint* current_registers;
+static sc_uint current_flags;
+
+// timing stuff
 
 // tasks
 
 typedef struct {
     sc_uint id_;
     sc_uint pc_;
+    sc_uchar flags_;
+    sc_uint *registers_;
+    sc_uint rate_;
     sc_uint *stack_;
-    sc_uint top_;
+    sc_int top_;
 } task;
 
-static task tasks[32];
-static sc_uint next_task = 0;
+static task tasks[16];
+static sc_uint tasks_count = 0;
 
-#define set_cmpbit() (flags |= 1)
-#define clear_cmpbit() (flags &= 0xFE)
-#define is_cmpbit() (flags & 1)
-
-//---------------------------------------------------------------------------------------------
-//---------------------------------------------------------------------------------------------
-
-
-
-sc_uint allocate_stack(sc_uint size) {
-    sc_uint i = next_stack++;
-    stacks[i] = (sc_uint*)malloc(size * sizeof(sc_uint)); 
-    return i;
+static inline void set_cmpbit(sc_uint *flags) {
+    *flags |= 1;
 }
 
-sc_uint allocate_task(sc_uint pc) {
-    sc_uint id = next_task++;
-    sc_uint s = allocate_stack(DEFAULT_STACK_SIZE);
+static inline void clear_cmpbit(sc_uint *flags) {
+    *flags &= 0xFE;
+}
+
+static inline sc_int is_cmpbit(sc_uint flags) {
+    return (flags & 1);
+}
+
+//---------------------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------------------
+
+sc_uint allocate_task(sc_uint pc, sc_uint rate) {
+    sc_uint id = tasks_count++;
+    sc_uint* s = (sc_uint*)malloc(DEFAULT_STACK_SIZE * sizeof(sc_uint));
+    sc_uint* r = (sc_uint*)malloc(128 * sizeof(sc_uint));
 
     task task = {
-        .id_ = id,
-        .pc_ = pc,
-        .stack_ = stacks[s],
-        .top_ = 0,
+        .id_        = id,
+        .pc_        = pc,
+        .flags_     = 0,
+        .registers_ = r,
+        .rate_      = rate,
+        .stack_     = s,
+        .top_       = -1,
     };
     tasks[id] = task;
 
@@ -201,8 +234,8 @@ sc_uint allocate_task(sc_uint pc) {
 }
 
 static inline void stack_push(sc_uint *s, sc_uint *top, sc_uint v) {
-    s[*top] = v;
     *top = *top + 1;
+    s[*top] = v;
 }
 
 static inline sc_uint stack_pop(sc_uint *s, sc_uint *top) {
@@ -211,25 +244,46 @@ static inline sc_uint stack_pop(sc_uint *s, sc_uint *top) {
     return v;
 }
 
-sc_bool run() {
-    // allocate main task
-    sc_uint main_id = allocate_task(entry_point);
-    
-    task t = tasks[main_id];
+void dump_stack(sc_uint *s, sc_int top) {
+    while (top >= 0) {
+        sc_error("s[%d] = %d\n", top, s[top]);
+        top--;
+    }
+}
+
+sc_bool run(sc_uint task_id, sc_bool screen_enabled) {
+    task t = tasks[task_id];
+
+    // current executing task
     sc_uint pc = t.pc_;
     sc_uint* s = t.stack_;
     sc_uint top = t.top_;
+    sc_uint* registers = t.registers_;
+    sc_uint flags = t.flags_;
+    sc_uint rate = t.rate_;
 
     DEBUG("Entering loop\n");
     for(;;) {
         sc_uint i = instructions[pc];
         sc_uint opcode = (i >> 24) & 0xFF;
+
+        sc_error("(%d: %d) - ", pc, i);
+        if (screen_enabled) {
+            // TODO: probably need to close any open files...
+            if (screen_should_close()) {
+                exit(1);
+            }
+        }
+    //      READ, 
+    // 
+        
         switch(opcode) {
             case MOV: {
                 DEBUG("MOV\n");
                 sc_uint reg_op1 = operand_one(i);
                 sc_uint reg_op2 = operand_two(i);
                 registers[reg_op1] = registers[reg_op2];
+                pc = pc + 1;
                 break;
             }
             case MOVL: {
@@ -240,6 +294,24 @@ sc_bool run() {
                 pc = pc + 1;
                 break;
             }
+            //SREAD, SWRITE, SREADY,
+            case SREAD: {
+                DEBUG("SREAD\n");
+                sc_uint sreg = STREAM_REG_INDEX(operand_two(i));
+                sc_queue* s = streams[sreg];
+                if (!is_empty(s)) {
+                    sc_uint value = dequeue(s);
+                    sc_uint reg  = operand_one(i);
+                    registers[reg] = value;
+                    set_cmpbit(&flags);
+                }
+                else {
+                    clear_cmpbit(&flags);
+                }
+
+                pc = pc + 1;
+                break;
+            }
             case JMP: {
                 DEBUG("JMP\n");
                 pc = (i >> 16) & 0xFF;
@@ -247,7 +319,7 @@ sc_bool run() {
             }
             case JMPZ: {
                 DEBUG("JMPZ\n");
-                if (is_cmpbit()) {
+                if (is_cmpbit(flags)) {
                     pc = (i >> 16) & 0xFF;
                 }
                 else {
@@ -255,21 +327,37 @@ sc_bool run() {
                 }
                 break;
             }
+            case JMPNZ: {
+                DEBUG("JMPNZ\n");
+                if (!is_cmpbit(flags)) {
+                    pc = (i >> 16) & 0xFF;
+                }
+                else {
+                    pc = pc + 1;
+                }
+                break;
+            }
+            case NOP: {
+                DEBUG("NOP\n");
+                pc = pc + 1;
+                break;
+            }
             case CMP: {
                 DEBUG("CMP\n");
                 sc_uint reg_op1 = operand_one(i);
                 sc_uint reg_op2 = operand_two(i);
                 if (registers[reg_op1] == registers[reg_op2]) {
-                    set_cmpbit();
+                    set_cmpbit(&flags);
                 }
                 else {
-                    clear_cmpbit();
+                    clear_cmpbit(&flags);
                 }
                 pc = pc + 1;
                 break;
             }
             case CALL: {
                 DEBUG("CALL\n");
+                dump_stack(s, top);
                 sc_uint pc_target = (i >> 16) & 0xFF;
                 // push return address
                 stack_push(s, &top, pc+1);
@@ -277,7 +365,11 @@ sc_bool run() {
                 break;
             }
             case RET: {
+                //TODO: seperate return stack
+                dump_stack(s, top);
                 pc = stack_pop(s, &top);
+                DEBUG("RET (%d)\n", pc);
+
                 break;
             }
             case HALT: {
@@ -290,6 +382,125 @@ sc_bool run() {
                 sc_uint reg_op1 = operand_two(i);
                 sc_uint reg_op2 = operand_three(i);
                 registers[reg_dst] = registers[reg_op1] + registers[reg_op2];
+                pc = pc + 1;
+                break;
+            }
+            case SUB: {
+                DEBUG("SUB\n");
+                sc_uint reg_dst = operand_one(i);
+                sc_uint reg_op1 = operand_two(i);
+                sc_uint reg_op2 = operand_three(i);
+                registers[reg_dst] = registers[reg_op1] - registers[reg_op2];
+                pc = pc + 1;
+                break;
+            }
+            case MUL: {
+                DEBUG("MUL\n");
+                sc_uint reg_dst = operand_one(i);
+                sc_uint reg_op1 = operand_two(i);
+                sc_uint reg_op2 = operand_three(i);
+                registers[reg_dst] = registers[reg_op1] * registers[reg_op2];
+                pc = pc + 1;
+                break;
+            }
+            case FTOI: {
+                sc_uint reg_dst = operand_one(i);
+                sc_uint reg_op1 = operand_two(i);
+                sc_int v = (sc_int)*((float*)&registers[reg_op1]);
+                registers[reg_dst] = *((sc_uint*)&v);
+                pc = pc + 1;
+                break;
+            }
+            case ADDF: {
+                DEBUG("ADDF\n");
+                sc_uint reg_dst = operand_one(i);
+                sc_uint reg_op1 = operand_two(i);
+                sc_uint reg_op2 = operand_three(i);
+                sc_float op1 = (sc_float)*((sc_int*)&registers[reg_op1]);
+                sc_float op2 = (sc_float)*((sc_int*)&registers[reg_op2]);
+                sc_float result = op1 + op2;
+                registers[reg_dst] = *((sc_uint*)&result);
+                pc = pc + 1;
+                break;
+            }
+            case SUBF: {
+                DEBUG("SUBF\n");
+                sc_uint reg_dst = operand_one(i);
+                sc_uint reg_op1 = operand_two(i);
+                sc_uint reg_op2 = operand_three(i);
+                sc_float op1 = (sc_float)*((sc_int*)&registers[reg_op1]);
+                sc_float op2 = (sc_float)*((sc_int*)&registers[reg_op2]);
+                sc_float result = op1 - op2;
+                registers[reg_dst] = *((sc_uint*)&result);
+                pc = pc + 1;
+                break;
+            }
+            case MULF: {
+                DEBUG("MULF\n");
+                sc_uint reg_dst = operand_one(i);
+                sc_uint reg_op1 = operand_two(i);
+                sc_uint reg_op2 = operand_three(i);
+                sc_float op1 = (sc_float)*((sc_int*)&registers[reg_op1]);
+                sc_float op2 = (sc_float)*((sc_int*)&registers[reg_op2]);
+                sc_float result = op1 * op2;
+                registers[reg_dst] = *((sc_uint*)&result);
+                pc = pc + 1;
+                break;
+            }
+            case ITOF: {
+                DEBUG("ITOF\n");
+                sc_uint reg_dst = operand_one(i);
+                sc_uint reg_op1 = operand_two(i);
+                sc_float v = (sc_float)*((sc_int*)&registers[reg_op1]);
+                registers[reg_dst] = *((sc_uint*)&v);
+                pc = pc + 1;
+                break;
+            }
+            case SHIFTR: {
+                DEBUG("SHIFTR\n");
+                sc_uint reg_dst = operand_one(i);
+                sc_uint reg_op1 = operand_two(i);
+                sc_uint reg_op2 = operand_three(i);
+                sc_uint op1 = (sc_uint)*((sc_int*)&registers[reg_op1]);
+                sc_uint op2 = (sc_uint)*((sc_int*)&registers[reg_op2]);
+                sc_uint result = op1 >> op2;
+                registers[reg_dst] = *((sc_uint*)&result);
+                pc = pc + 1;
+                break;
+            } 
+            case SHIFTL: {
+                DEBUG("SHIFTL\n");
+                sc_uint reg_dst = operand_one(i);
+                sc_uint reg_op1 = operand_two(i);
+                sc_uint reg_op2 = operand_three(i);
+                sc_uint op1 = (sc_uint)*((sc_int*)&registers[reg_op1]);
+                sc_uint op2 = (sc_uint)*((sc_int*)&registers[reg_op2]);
+                sc_uint result = op1 << op2;
+                registers[reg_dst] = *((sc_uint*)&result);
+                pc = pc + 1;
+                break;
+            }
+            case AND: {
+                DEBUG("AND\n");
+                sc_uint reg_dst = operand_one(i);
+                sc_uint reg_op1 = operand_two(i);
+                sc_uint reg_op2 = operand_three(i);
+                sc_uint op1 = (sc_uint)*((sc_int*)&registers[reg_op1]);
+                sc_uint op2 = (sc_uint)*((sc_int*)&registers[reg_op2]);
+                sc_uint result = op1 & op2;
+                registers[reg_dst] = *((sc_uint*)&result);
+                pc = pc + 1;
+                break;
+            } 
+            case OR: {
+                DEBUG("OR\n");
+                sc_uint reg_dst = operand_one(i);
+                sc_uint reg_op1 = operand_two(i);
+                sc_uint reg_op2 = operand_three(i);
+                sc_uint op1 = (sc_uint)*((sc_int*)&registers[reg_op1]);
+                sc_uint op2 = (sc_uint)*((sc_int*)&registers[reg_op2]);
+                sc_uint result = op1 | op2;
+                registers[reg_dst] = *((sc_uint*)&result);
                 pc = pc + 1;
                 break;
             }
@@ -309,22 +520,188 @@ sc_bool run() {
                 pc = pc + 1;
                 break;
             }
+            //SPAWN, YIELD, START,
+            case SPAWN: {
+                DEBUG("SPAWN\n");
+                sc_uint task_rate = registers[operand_one(i)];
+                sc_uint task_pc   = operand_two(i);
+                sc_uint id   = allocate_task(task_pc, task_rate);
+                // add to running queue
+                running_queue = id;
+                pc = pc + 1;
+                break;
+            }
+            case YIELD: {
+                DEBUG("YIELD\n");
+                //pc = tasks[running_queue].pc_;
+                struct timespec end_time;
+                clock_gettime(CLOCK_MONOTONIC, &end_time);
+                // Calculate the elapsed time in nanoseconds
+                long long elapsed_time_ns = (end_time.tv_sec - start_time.tv_sec) * 1000000000LL + end_time.tv_nsec - start_time.tv_nsec;
+
+                pc = pc + 1;
+                long long time_left = (1000000000 / rate) - elapsed_time_ns;
+                if (time_left > 0) {
+                    struct timespec sleep_time;
+                    sleep_time.tv_sec = 0;
+                    sleep_time.tv_nsec = time_left;
+                    nanosleep(&sleep_time, NULL);
+                } 
+                start_time = end_time;
+                break;
+            }
+            case START: {
+                DEBUG("START\n");
+                t = tasks[running_queue];
+
+                // current executing task
+                pc = t.pc_;
+                s = t.stack_;
+                top = t.top_;
+                registers = t.registers_;
+                flags = t.flags_;
+                rate = t.rate_;
+                break;
+            }
             case CONSOLE: {
                 DEBUG("CONSOLE\n");
                 sc_uint console_command = operand_one(i);
                 sc_uint reg = operand_two(i);
 
-                if (console_command == 0) {
+                if (console_command == CONSOLE_WRITE) {
                     // write command
                     write_console(registers[reg]);
                 }
                 pc = pc + 1;
                 break;
             }
+            case SCREEN: {
+                DEBUG("SCREEN\n");
+                sc_uint screen_command = operand_one(i);
+
+                switch (screen_command) {
+                    case SCREEN_RESIZE: {
+                        // create/resize window command
+                        sc_uint reg_w = operand_two(i);
+                        sc_uint reg_h = operand_three(i);
+                        sc_uint w = registers[reg_w];
+                        sc_uint h = registers[reg_h];
+                        screen_resize(w, h, 1);
+                        break;   
+                    }
+                    case SCREEN_PIXEL: {
+                        sc_uint reg_x = operand_two(i);
+                        sc_uint reg_y = operand_three(i);
+                        sc_uint x = registers[reg_x];
+                        sc_uint y = registers[reg_y];
+                        screen_move(x,y);
+                        screen_pixel();
+                        break;
+                    }
+                    case SCREEN_FILL: {
+                        screen_fill();
+                        break;
+                    }
+                    case SCREEN_RECT: {
+                        sc_uint reg_x = operand_two(i);
+                        sc_uint reg_y = operand_three(i);
+                        sc_uint x = registers[reg_x];
+                        sc_uint y = registers[reg_y];
+                        screen_rect(x,y);
+                        break;
+                    }
+                    case SCREEN_BEGIN: {
+                        screen_process_events();
+                        screen_begin_frame();
+                        // screen_colour(0);
+                        // screen_fill();
+                        break;
+                    }
+                    case SCREEN_END: {
+                        screen_end_frame();
+                        break;
+                    }
+                    case SCREEN_COLOUR: {
+                        sc_uint reg_c = operand_two(i);
+                        sc_uint c = registers[reg_c];
+                        screen_colour(c);
+                        break;
+                    }
+                    case SCREEN_MOVE: {
+                        sc_uint reg_x = operand_two(i);
+                        sc_uint reg_y = operand_three(i);
+                        sc_uint x = registers[reg_x];
+                        sc_uint y = registers[reg_y];
+                        screen_move(x,y);
+                        break;
+                    }
+                    default: {
+                        sc_error("ERROR: unknown screen command %d\n", screen_command);
+                        break;
+                    }
+                }
+                pc = pc + 1;
+                break;
+            }
+            case PUSH: {
+                DEBUG("PUSH\n");
+                sc_uint reg_op1 = operand_one(i);
+                stack_push(s, &top, registers[reg_op1]);
+                pc = pc + 1;
+                break;
+            }
+            case POP: {
+                DEBUG("POP\n");
+                sc_uint reg_op1 = operand_one(i);
+                registers[reg_op1] = stack_pop(s, &top);
+                pc = pc + 1;
+                break;
+            }
+            case STREAM: {
+                DEBUG("STREAM\n");
+                sc_uint sreg = STREAM_REG_INDEX(operand_one(i));
+                sc_uint size = operand_two(i);
+                
+                if (size != 32) {
+                    sc_error("ERROR: stream size not 32\n");
+                    return FALSE;
+                }
+                streams[sreg] = allocate_queue(1024);
+
+                pc = pc + 1;
+                break;
+            }
+            case SETSF: {
+                DEBUG("SETSF\n");
+                pc = pc + 1;
+                break;
+            }
+            case SETSC: {
+                DEBUG("SETSC\n");
+                pc = pc + 1;
+                break;
+            }
+            case ATTACH: {
+                DEBUG("ATTACH\n");
+                sc_uint greg = GENERATOR_REG_INDEX(operand_one(i));
+                sc_uint sreg = STREAM_REG_INDEX(operand_two(i));
+                sc_uint reg = operand_three(i);
+
+                if (greg == MOUSE_GENERATOR) {
+                    // connect mouse generator to stream
+                    attach_mouse_generator(streams[sreg]);
+                }
+                pc = pc + 1;
+                break;
+            }
             default:
                 sc_error("ERROR: unknown opcode %u\n", opcode);
+                for (;;) {
+
+                }
                 return FALSE;
         }
+        // screen_end_frame();
     }
     return TRUE;
 }
@@ -393,16 +770,30 @@ sc_int main(int argc, char** argv) {
                 sc_error("ERROR: console would not initialize\n");
             }
         }
+        sc_bool screen_enabled = FALSE;
         if (device_capabilities & USE_DEVICE_SCREEN) {
             if (!has_screen_device()) {
                 sc_error("ERROR: required screen device not supported\n");
             }
+            DEBUG("Initializing screen\n");
+            init_screen();
+            screen_set_rate(30); // default screen rate
+            screen_enabled = TRUE;
         }
 
         // initialize VM
         DEBUG("Entering VM\n");
         
-        run();
+        // allocate main task, 0 rate means fast as possible
+        sc_uint main_id = allocate_task(entry_point, 0);
+
+        // initialize clock
+        clock_gettime(CLOCK_MONOTONIC, &start_time);
+        run(main_id, screen_enabled);
+
+        if (screen_enabled) {
+            delete_screen();
+        }
     }
 
     return 0;

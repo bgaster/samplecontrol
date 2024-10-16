@@ -33,7 +33,6 @@ sc_char *mcopy(const sc_char *src, sc_char *dst, sc_size_t len) {
     return dst;
 }
 
-
 sc_bool is_digit(sc_int c) {
     return (c >= '0' && c <= '9') ? TRUE : FALSE;
 }

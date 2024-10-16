@@ -11,6 +11,7 @@
 #define SCREEN_HEADER_H
 
 #include <util.h>
+#include <lfqueue.h>
 
 /**
  * @brief check to see if current build has screen device
@@ -24,10 +25,18 @@ sc_bool has_screen_device();
  * @return true if screen is initialized correctly, otherwise false
  */
 sc_bool init_screen();
+void screen_set_rate(sc_int fps);
+sc_bool screen_should_close();
+void screen_begin_frame();
+void screen_end_frame();
+sc_bool screen_process_events();
+sc_bool attach_mouse_generator(sc_queue * queue);
 
-void screen_pixel(sc_ushort x, sc_ushort y, sc_uchar color);
-void screen_fill(sc_uchar color);
-void screen_rect(sc_ushort x1, sc_ushort y1, sc_ushort x2, sc_ushort y2, sc_uchar color);
+void screen_pixel();
+void screen_fill();
+void screen_rect(sc_ushort w, sc_ushort h);
+void screen_move(sc_ushort x, sc_ushort y);
+void screen_colour(sc_uchar index);
 void screen_blit(sc_ushort x1, sc_ushort y1, sc_ushort x2, sc_ushort y2, sc_uchar *pixels);
 void screen_palette(void);
 void screen_resize(sc_ushort width, sc_ushort height, int scale);

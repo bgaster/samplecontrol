@@ -71,7 +71,7 @@ typedef union {
 } operand_option;
 
 enum {
-    OP_Label, OP_Reg, OP_Lit, OP_Off
+    OP_Label, OP_Reg, OP_Lit, OP_Off, OP_Raw,
 };
 
 typedef struct {
@@ -216,6 +216,9 @@ void print_operand(operand op) {
     else if (op.type_ == OP_Lit) {
         sc_print("%d", op.op_.literal_);
     }
+    else if (op.type_ == OP_Raw) {
+        sc_print("%d", op.op_.literal_);
+    }
 }
 
 typedef struct  {
@@ -323,10 +326,11 @@ typedef struct {
 // these must be kept in the same order as opcodes[] below, otherwise
 // directly lookup will value. i.e. enum is used to index into opcodes[].
 enum {
-    MOV, MOVL, READ, WRITE,
+    MOV, MOVL, SREAD, SWRITE, SREADY,
     JMP, JMPZ, JMPNZ, NOP, CMP, CALL, RET, HALT,
-    ADD, SUB, MUL, FTOI,
+    ADD, SUB, MUL, DIV, MOD, FTOI,
     ADDF, SUBF, MULF, ITOF,
+    SHIFTR, SHIFTL, AND, OR,
     LDL, PUSH, POP,
 
     // Loads          Stores      Size and Type
@@ -339,12 +343,12 @@ enum {
     SPAWN, YIELD, START,
 
     // external blocks, might not always be supported
-    CONSOLE,
+    CONSOLE, SCREEN, MOUSE,
 
     // now instructions that are not in assembler, but are in the binary format
     // mostly for supporting streams
     STREAM, SETSF, SETSC,
-    ATTACH, 
+    ATTACH, AWAIT,
 };
 
 const opcode opcodes[] = {
@@ -352,7 +356,7 @@ const opcode opcodes[] = {
     { "MOV", MOV, 2}, { "MOVL", MOVL, 2}, 
     
     // Streams
-    {"READ", READ, 2}, { "WRITE", WRITE, 2},
+    {"SREAD", SREAD, 2}, { "SWRITE", SWRITE, 2}, { "SREADY", SREADY, 2},
     
     // Control flow (expect tasks)
     { "JMP", JMP, 1}, {"JMPZ", JMPZ, 1}, {"JMPNZ", JMPNZ, 1}, {"NOP", NOP, 0}, {"CMP", CMP, 2}, 
@@ -360,8 +364,9 @@ const opcode opcodes[] = {
 
 
     // arithmeric
-    {"ADD", ADD, 3}, {"SUB", SUB, 3}, {"MUL", ADD, 3}, {"FTOI", FTOI, 2},
+    {"ADD", ADD, 3}, {"SUB", SUB, 3}, {"MUL", ADD, 3}, {"DIV", DIV, 3}, {"MOD", MOD, 3}, {"FTOI", FTOI, 2},
     {"ADDF", ADD, 3}, {"SUBF", SUBF, 3}, {"MULF", ADD, 3}, {"ITOF", ITOF, 2},
+    {"SHIFTR", SHIFTR, 3}, {"SHIFTL", SHIFTL, 3}, {"AND", AND, 3}, {"OR", OR, 3},
     {"LDL", LDL, 1}, {"PUSH", PUSH, 1}, {"POP", POP, 1},
 
     // LD/ST
@@ -380,10 +385,12 @@ const opcode opcodes[] = {
     // LDM              STM         Multiple words
 
     {"CONSOLE", CONSOLE, 2}, // CONSOLE <console-op> REG
+    {"SCREEN", SCREEN, 3}, 
+    {"MOUSE", MOUSE, 3},
 
     // stream insructions
     {"STREAM", STREAM, 4}, {"SETSF", SETSF, 2}, {"SETSC", SETSC, 2}, 
-    {"ATTACH", ATTACH, 3},
+    {"ATTACH", ATTACH, 3}, {"AWAIT", AWAIT, 0},
  };
 
 sc_bool match_opcode(sc_char *op, opcode * dst_opcode) {
@@ -392,7 +399,7 @@ sc_bool match_opcode(sc_char *op, opcode * dst_opcode) {
     // return false in the case that it is a stream instruction
     // these are handled seperatly and not allowed to appear in standard
     // instruction stream for assembler
-    if (scmp("STREAM", op, len) || scmp("ATTACH", op, len)) {
+    if (scmp("STREAM", op, len) || scmp("ATTACH", op, len) || scmp("AWAIT", op, len)) {
         return FALSE;
     }
 
@@ -437,6 +444,9 @@ sc_uint encode_operand(operand operand) {
     }
     else if (operand.type_ == OP_Lit) {
         return operand.op_.literal_ * sizeof(sc_int); // convert to byte offsets
+    }
+    else if (operand.type_ == OP_Raw) {
+        return operand.op_.literal_ ; 
     }
     else {
         return operand.op_.label_->offset_;
@@ -491,6 +501,12 @@ void print_encode_instruction(sc_uint inst, char* prefix) {
 
 // Console device
 #define CONSOLE_WRITE 0
+
+enum { 
+    SCREEN_RESIZE=0, SCREEN_PIXEL, SCREEN_FILL, SCREEN_RECT, 
+    SCREEN_BLIT, SCREEN_PALETTE, SCREEN_BEGIN, SCREEN_END, SCREEN_COLOUR,
+    SCREEN_MOVE,
+};
 
 //-----------------------------------------------------------------------------------------------
 // Labels
@@ -729,13 +745,12 @@ sc_bool parse_string_literal(sc_ushort * lit_offset) {
     sc_int buffer_count = 0;
 
     while (token != '"' && token != 0 && token != '\n') {
-        //sc_print("%c (%c) ", token, *(src_buffer+1));
+        //TODO: add support for control codes
         if (token == '\\' && *(src_buffer) == 'n') {
             src_buffer++;
             buffer[buffer_count++] = '\n';
         }
         else {
-            //sc_print("%c", *(src_buffer+1));
             buffer[buffer_count++] = token;
         }
         token = *src_buffer++;
@@ -1117,8 +1132,8 @@ sc_bool parse_stream() {
         return FALSE;        
     }
     operand size_operand;
-    size_operand.type_ = OP_Lit;
-    size_operand.op_.literal_ = lit_size_offset;
+    size_operand.type_ = OP_Raw;
+    size_operand.op_.literal_ = lit;
 
     strip_whitespace();
     operand rate_operand;
@@ -1128,14 +1143,16 @@ sc_bool parse_stream() {
         src_buffer++;
         token = *src_buffer++;
     }
-    else {   
-        sc_ushort lit_rate_offset;
-        if (!parse_literal(&lit_rate_offset)) {
-            sc_error("ERROR: line(%d) expected rate\n", line);
+    else {
+        if (!parse_operand(&rate_operand)) {    
+            sc_error("ERROR: line(%d) expected register\n", line);
+            return FALSE;
+        
+        }
+        if (rate_operand.type_ != OP_Reg || !is_general_reg(rate_operand.op_.operand_)) {
+            sc_error("ERROR: line(%d) expected general register\n", line);
             return FALSE;
         }
-        rate_operand.type_ = OP_Lit;
-        rate_operand.op_.literal_ = lit_rate_offset;
     }    
 
     strip_whitespace();
@@ -1152,7 +1169,7 @@ sc_bool parse_stream() {
     }
     operand continuous_operand;
     continuous_operand.type_ = OP_Lit;
-    continuous_operand.op_.literal_ = lit_continuous_offset;
+    continuous_operand.op_.literal_ = lit;
 
     operand operands[3];
 
@@ -1164,7 +1181,7 @@ sc_bool parse_stream() {
 
     // now set rate instruction
     operands[0] = stream_reg;
-    operands[1] = size_operand;
+    operands[1] = rate_operand;
     i = make_instruction(SETSF, 2, operands);
     push_instruction(i);
 
@@ -1207,21 +1224,32 @@ sc_bool parse_attach() {
         return FALSE;
     }
 
-    sc_ushort lit_size_offset;
-    if (!parse_literal(&lit_size_offset)) {
-        sc_error("ERROR: line(%d) expected size\n", line);
+
+    operand operand_three;
+    if (!parse_operand(&operand_three)) {    
+        sc_error("ERROR: line(%d) expected general register\n", line);
+        return FALSE;
+    }
+    if (operand_one.type_ != OP_Reg || !(is_general_reg(operand_three.op_.operand_))) {
+        sc_error("ERROR: line(%d) expected general register\n", line);
         return FALSE;
     }
 
-    operand operand_size;
-    operand_size.type_ = OP_Lit;
-    operand_size.op_.literal_ = lit_size_offset;
+    // sc_ushort lit_size_offset;
+    // if (!parse_literal(&lit_size_offset)) {
+    //     sc_error("ERROR: line(%d) expected size\n", line);
+    //     return FALSE;
+    // }
+
+    // operand operand_size;
+    // operand_size.type_ = OP_Lit;
+    // operand_size.op_.literal_ = lit_size_offset;
 
     // emit ATTACH instruction
     operand operands[3];
     operands[0] = operand_one;
     operands[1] = operand_two;
-    operands[2] = operand_size;
+    operands[2] = operand_three;
 
     instruction i = make_instruction(ATTACH, 3, operands);
     push_instruction(i);
@@ -1254,7 +1282,7 @@ sc_bool parse_console() {
         }
 
         operand operand_one;
-        operand_one.type_ = OP_Lit;
+        operand_one.type_ = OP_Raw;
         operand_one.op_.literal_ = CONSOLE_WRITE;
 
         operand operands[3];
@@ -1264,6 +1292,187 @@ sc_bool parse_console() {
         instruction i = make_instruction(CONSOLE, 2, operands);
         push_instruction(i);
 
+    } else {
+        sc_error("ERROR: line(%d) unknown device function\n", line);
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
+sc_bool parse_screen() {
+    if (token != '/') {
+        sc_error("ERROR: line(%d) expected / following device\n", line);
+        return FALSE;
+    }
+
+    strip_whitespace();
+
+    sc_char func[MAX_DEVICE_SIZE+1];
+    sc_int func_length = 0;
+    token = *src_buffer++;
+    while (token != ' ' && token != 0 && token != '\n' && func_length <= MAX_DEVICE_SIZE) {
+        func[func_length++] = token;
+        token = *src_buffer++;
+    }
+    func[func_length] = '\0';
+
+    if (scmp(func, "resize", 6)) {
+        operand operand_two;
+        if (!parse_operand(&operand_two)) {    
+            sc_error("ERROR: line(%d) expected operand\n", line);
+            return FALSE;
+        }
+
+        operand operand_three;
+        if (!parse_operand(&operand_three)) {    
+            sc_error("ERROR: line(%d) expected operand\n", line);
+            return FALSE;
+        }
+
+        operand operand_one;
+        operand_one.type_ = OP_Raw;
+        operand_one.op_.literal_ = SCREEN_RESIZE;
+
+        operand operands[3];
+        operands[0] = operand_one;
+        operands[1] = operand_two;
+        operands[2] = operand_three;
+
+        instruction i = make_instruction(SCREEN, 3, operands);
+        push_instruction(i);
+
+    } else if (scmp(func, "resize", 6)) {
+        operand operand_two;
+        if (!parse_operand(&operand_two)) {    
+            sc_error("ERROR: line(%d) expected operand\n", line);
+            return FALSE;
+        }
+
+        operand operand_three;
+        if (!parse_operand(&operand_three)) {    
+            sc_error("ERROR: line(%d) expected operand\n", line);
+            return FALSE;
+        }
+
+        operand operand_one;
+        operand_one.type_ = OP_Raw;
+        operand_one.op_.literal_ = SCREEN_RESIZE;
+
+        operand operands[3];
+        operands[0] = operand_one;
+        operands[1] = operand_two;
+        operands[2] = operand_three;
+
+        instruction i = make_instruction(SCREEN, 3, operands);
+        push_instruction(i);
+
+    } else if (scmp(func, "pixel", 5)) {
+        operand operand_two;
+        if (!parse_operand(&operand_two)) {    
+            sc_error("ERROR: line(%d) expected operand\n", line);
+            return FALSE;
+        }
+
+        operand operand_three;
+        if (!parse_operand(&operand_three)) {    
+            sc_error("ERROR: line(%d) expected operand\n", line);
+            return FALSE;
+        }
+
+        operand operand_one;
+        operand_one.type_ = OP_Raw;
+        operand_one.op_.literal_ = SCREEN_PIXEL;
+
+        operand operands[3];
+        operands[0] = operand_one;
+        operands[1] = operand_two;
+        operands[2] = operand_three;
+
+        instruction i = make_instruction(SCREEN, 3, operands);
+        push_instruction(i);
+
+    } else if (scmp(func, "rect", 4)) {
+        operand operand_two;
+        if (!parse_operand(&operand_two)) {    
+            sc_error("ERROR: line(%d) expected operand\n", line);
+            return FALSE;
+        }
+
+        operand operand_three;
+        if (!parse_operand(&operand_three)) {    
+            sc_error("ERROR: line(%d) expected operand\n", line);
+            return FALSE;
+        }
+
+        operand operand_one;
+        operand_one.type_ = OP_Raw;
+        operand_one.op_.literal_ = SCREEN_RECT;
+
+        operand operands[3];
+        operands[0] = operand_one;
+        operands[1] = operand_two;
+        operands[2] = operand_three;
+
+        instruction i = make_instruction(SCREEN, 3, operands);
+        push_instruction(i);
+
+    } else if (scmp(func, "colour", 6)) {
+        operand operand_two;
+        if (!parse_operand(&operand_two)) {    
+            sc_error("ERROR: line(%d) expected operand\n", line);
+            return FALSE;
+        }
+
+        operand operand_one;
+        operand_one.type_ = OP_Raw;
+        operand_one.op_.literal_ = SCREEN_COLOUR;
+
+        operand operands[3];
+        operands[0] = operand_one;
+        operands[1] = operand_two;
+
+        instruction i = make_instruction(SCREEN, 2, operands);
+        push_instruction(i);
+
+    } else if (scmp(func, "move", 4)) {
+        operand operand_two;
+        if (!parse_operand(&operand_two)) {    
+            sc_error("ERROR: line(%d) expected operand\n", line);
+            return FALSE;
+        }
+
+        operand operand_three;
+        if (!parse_operand(&operand_three)) {    
+            sc_error("ERROR: line(%d) expected operand\n", line);
+            return FALSE;
+        }
+
+        operand operand_one;
+        operand_one.type_ = OP_Raw;
+        operand_one.op_.literal_ = SCREEN_MOVE;
+
+        operand operands[3];
+        operands[0] = operand_one;
+        operands[1] = operand_two;
+        operands[2] = operand_three;
+
+        instruction i = make_instruction(SCREEN, 3, operands);
+        push_instruction(i);
+    } else if (scmp(func, "fill", 4)) {
+        operand operand_one;
+        operand_one.type_ = OP_Raw;
+        operand_one.op_.literal_ = SCREEN_FILL;
+        instruction i = make_instruction(SCREEN, 1,&operand_one);
+        push_instruction(i);
+    } else if (scmp(func, "begin", 5) || scmp(func, "end", 5)) {
+        operand operand_one;
+        operand_one.type_ = OP_Raw;
+        operand_one.op_.literal_ = scmp(func, "begin", 5) ? SCREEN_BEGIN : SCREEN_END;
+        // operand operands[3];
+        // operands[0] = operand_one;
+        instruction i = make_instruction(SCREEN, 1,&operand_one);
+        push_instruction(i);
     } else {
         sc_error("ERROR: line(%d) unknown device function\n", line);
         return FALSE;
@@ -1292,7 +1501,7 @@ sc_bool parse() {
         else if (token == '@') {
             // toplevel construct (e.g. stream, task, etc)
             // reset label prefix...
-            label_prefix[0] = '\0';
+            
 
             sc_char tl[MAX_TOPLEVEL_SIZE+1];
             sc_int tl_length = 0;
@@ -1304,6 +1513,7 @@ sc_bool parse() {
             tl[tl_length] = '\0';
             if (scmp(tl, "task", 4)) {
                 DEBUG("start task\n");
+                label_prefix[0] = '\0';
                 label* dst_label;
                 if (parse_label(&dst_label, TRUE)) {
                     sc_int len = slen(dst_label->name_.str_);
@@ -1317,6 +1527,7 @@ sc_bool parse() {
             }
             else if (scmp(tl, "func", 4)) {
                 DEBUG("start func\n");
+                label_prefix[0] = '\0';
                 label* dst_label;
                 if (parse_label(&dst_label, TRUE)) {
                     sc_int len = slen(dst_label->name_.str_);
@@ -1339,7 +1550,15 @@ sc_bool parse() {
                     return FALSE;
                 }
             }
+            else if (scmp(tl, "await", 5)) {
+                DEBUG("start await\n");
+                sc_print("adding label ... %s\n", label_prefix);
+                instruction i = make_instruction(AWAIT, 0, NULL);
+                push_instruction(i);
+            }
             else if (scmp(tl, "entry", 4)) {
+                // TODO: should we set prefix????
+                label_prefix[0] = '\0'; 
                 // check that there is only one entry !!
                 if (entry_point != ENTRY_NOTDEFINED) {
                     sc_error("ERROR: line(%d) multiple entry points\n", line);
@@ -1368,7 +1587,14 @@ sc_bool parse() {
                     return FALSE;
                 }
                 device_capabilities |= USE_DEVICE_CONSOLE;
-            } else {
+            }
+            else if (scmp(dev, "Screen", 6)) {
+                if (!parse_screen()) {
+                    return FALSE;
+                }
+                device_capabilities |= USE_DEVICE_SCREEN;
+            } 
+            else {
                 sc_error("ERROR: line(%d) unknown device\n", line);
                 return FALSE;
             }
