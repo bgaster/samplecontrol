@@ -110,10 +110,10 @@ sc_bool is_consumer_reg(sc_uint reg) {
 // directly lookup will value. i.e. enum is used to index into opcodes[].
 enum {
     MOV, MOVL, SREAD, SWRITE, SREADY,
-    JMP, JMPZ, JMPNZ, NOP, CMP, CALL, RET, HALT,
+    JMP, JMPZ, JMPNZ, NOP, CMP, CMPLT, CALL, RET, HALT,
     ADD, SUB, MUL, DIV, MOD, FTOI,
     ADDF, SUBF, MULF, ITOF,
-    SHIFTR, SHIFTL, AND, OR,
+    SHIFTR, SHIFTL, AND, OR, XOR,
     LDL, PUSH, POP,
 
     // Loads          Stores      Size and Type
@@ -355,6 +355,19 @@ sc_bool run(sc_uint task_id, sc_bool screen_enabled) {
                 pc = pc + 1;
                 break;
             }
+            case CMPLT: {
+                DEBUG("CMPLT\n");
+                sc_uint reg_op1 = operand_one(i);
+                sc_uint reg_op2 = operand_two(i);
+                if (registers[reg_op1] < registers[reg_op2]) {
+                    set_cmpbit(&flags);
+                }
+                else {
+                    clear_cmpbit(&flags);
+                }
+                pc = pc + 1;
+                break;
+            }
             case CALL: {
                 DEBUG("CALL\n");
                 dump_stack(s, top);
@@ -456,6 +469,7 @@ sc_bool run(sc_uint task_id, sc_bool screen_enabled) {
                 pc = pc + 1;
                 break;
             }
+            // TODO: move all binary ops together and then use a lookup table to get the operation?
             case SHIFTR: {
                 DEBUG("SHIFTR\n");
                 sc_uint reg_dst = operand_one(i);
@@ -500,6 +514,18 @@ sc_bool run(sc_uint task_id, sc_bool screen_enabled) {
                 sc_uint op1 = (sc_uint)*((sc_int*)&registers[reg_op1]);
                 sc_uint op2 = (sc_uint)*((sc_int*)&registers[reg_op2]);
                 sc_uint result = op1 | op2;
+                registers[reg_dst] = *((sc_uint*)&result);
+                pc = pc + 1;
+                break;
+            }
+            case XOR: {
+                DEBUG("XOR\n");
+                sc_uint reg_dst = operand_one(i);
+                sc_uint reg_op1 = operand_two(i);
+                sc_uint reg_op2 = operand_three(i);
+                sc_uint op1 = (sc_uint)*((sc_int*)&registers[reg_op1]);
+                sc_uint op2 = (sc_uint)*((sc_int*)&registers[reg_op2]);
+                sc_uint result = op1 ^ op2;
                 registers[reg_dst] = *((sc_uint*)&result);
                 pc = pc + 1;
                 break;

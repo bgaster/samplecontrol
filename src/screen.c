@@ -141,24 +141,42 @@ void screen_redraw(void) {
 
 sc_bool screen_process_events() {
     SDL_Event e;
-    quit = FALSE;
     while (SDL_PollEvent(&e)){
-        if (e.type == SDL_QUIT){
-            quit = TRUE;
-        }
-        if (e.type == SDL_KEYDOWN){
-            quit = TRUE;
-        }
-        // if (e.type == SDL_MOUSEBUTTONDOWN){
-        //     quit = TRUE;
-        // }
-        if (e.type == SDL_MOUSEMOTION) {
-            if (mouse_queue) {
-                sc_ushort mouse_x = e.motion.x;
-                sc_ushort mouse_y = e.motion.y;
-                sc_uint v = mouse_x << 16 | mouse_y;
-                enqueue(mouse_queue, v);
+        switch (e.type) {
+            case SDL_QUIT: {
+                quit = TRUE;
+                break;
             }
+            case SDL_KEYDOWN: {
+                quit = TRUE;
+                break;
+            }
+            // mouse events are handled via a single 32-bit uint
+            // top bit is 1 if it is a button message
+            //     bottom 8 bits then represent the button pressed
+            // top bit is 0 if it is a mouse motion message
+            //     top 16-bits represent x
+            //     bottom 16-bits represent y
+            case SDL_MOUSEBUTTONDOWN: {
+                if (mouse_queue) {
+                    SDL_MouseButtonEvent b = e.button;
+                    sc_uint v = ((sc_ushort)b.button) | 0x80000000; // set top bit
+                    enqueue(mouse_queue, v);
+                }
+                break;
+            }
+            case SDL_MOUSEMOTION: {
+                if (mouse_queue) {
+                    sc_ushort mouse_x = e.motion.x;
+                    sc_ushort mouse_y = e.motion.y;
+                    sc_uint v = (mouse_x << 16 | mouse_y) & 0x7FFFFFFF; 
+                    // top bit is cleared for mouse move, this should not actually be necessary...
+                    enqueue(mouse_queue, v);
+                }
+                break;
+            }
+            default:
+                break;    
         }
     }
     return quit;

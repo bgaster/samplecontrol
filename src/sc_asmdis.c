@@ -327,10 +327,10 @@ typedef struct {
 // directly lookup will value. i.e. enum is used to index into opcodes[].
 enum {
     MOV, MOVL, SREAD, SWRITE, SREADY,
-    JMP, JMPZ, JMPNZ, NOP, CMP, CALL, RET, HALT,
+    JMP, JMPZ, JMPNZ, NOP, CMP, CMPLT, CALL, RET, HALT,
     ADD, SUB, MUL, DIV, MOD, FTOI,
     ADDF, SUBF, MULF, ITOF,
-    SHIFTR, SHIFTL, AND, OR,
+    SHIFTR, SHIFTL, AND, OR, XOR,
     LDL, PUSH, POP,
 
     // Loads          Stores      Size and Type
@@ -359,14 +359,15 @@ const opcode opcodes[] = {
     {"SREAD", SREAD, 2}, { "SWRITE", SWRITE, 2}, { "SREADY", SREADY, 2},
     
     // Control flow (expect tasks)
-    { "JMP", JMP, 1}, {"JMPZ", JMPZ, 1}, {"JMPNZ", JMPNZ, 1}, {"NOP", NOP, 0}, {"CMP", CMP, 2}, 
+    { "JMP", JMP, 1}, {"JMPZ", JMPZ, 1}, {"JMPNZ", JMPNZ, 1}, 
+    {"NOP", NOP, 0}, {"CMP", CMP, 2}, {"CMPLT", CMPLT, 2},
     {"CALL", CALL, 1}, {"RET", RET, 0}, {"HALT", HALT, 0},
 
 
     // arithmeric
     {"ADD", ADD, 3}, {"SUB", SUB, 3}, {"MUL", ADD, 3}, {"DIV", DIV, 3}, {"MOD", MOD, 3}, {"FTOI", FTOI, 2},
     {"ADDF", ADD, 3}, {"SUBF", SUBF, 3}, {"MULF", ADD, 3}, {"ITOF", ITOF, 2},
-    {"SHIFTR", SHIFTR, 3}, {"SHIFTL", SHIFTL, 3}, {"AND", AND, 3}, {"OR", OR, 3},
+    {"SHIFTR", SHIFTR, 3}, {"SHIFTL", SHIFTL, 3}, {"AND", AND, 3}, {"OR", OR, 3}, {"XOR", XOR, 3},
     {"LDL", LDL, 1}, {"PUSH", PUSH, 1}, {"POP", POP, 1},
 
     // LD/ST

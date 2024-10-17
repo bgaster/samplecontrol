@@ -37,6 +37,18 @@ _start_after:
     SREAD R9 S0          
     JMPZ _nomouse       ; SREAD sets cmp flag to 1 if value read, otherwise 0
     ; handle mouse message
+    ; check button or motion message
+    MOVL R20 #2147483648
+    LDR R20 R20
+    AND R20 R9 R20 ; 0x80000000
+    MOVL R21 #0
+    LDR R21 R21
+    CMP R20 R21
+    JMPZ _mousemotion
+    MOV R10 R21
+    MOV R11 R20
+    JMP _nomouse
+_mousemotion:
     ; sc_ushort x = (value >> 16) & 0xFFFF;
     ; sc_ushort y = value & 0xFFFF;
     MOVL R12 #16
@@ -53,7 +65,7 @@ _nomouse:
     MOVL R2 #1          ; colour index 
     LDR R2 R2
     .Screen/colour R2
-    MOVL R0 #100         ; (10,10)
+    MOVL R0 #10         ; (10,10)
     LDR R0 R0
     .Screen/rect R0 R0
 
