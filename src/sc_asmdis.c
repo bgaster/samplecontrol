@@ -287,14 +287,37 @@ static instruction instructions[MAX_INSRUCTIONS];
 static sc_ushort instruction_count = 0;
 
 // literal pool
-static sc_uint literals[MAX_LITERALS];
+static sc_uchar literals[MAX_LITERALS];
 static sc_ushort literal_count = 0;
 
 // label pool
 static label labels[MAX_LABELS];
 static sc_ushort label_count = 0;
 
-#define push_literal(l) (literals[(sc_int)literal_count]=*((sc_uint*)&l), literal_count++)
+sc_ushort push_literal_32(sc_uint l) {
+    // add any necessary padding for alignment
+    literal_count = literal_count + (literal_count % 4);
+    *((sc_uint*)&literals[(sc_int)literal_count]) = l;
+    literal_count = literal_count + 4;
+    return literal_count-4;
+}
+
+sc_ushort push_literal_16(sc_ushort l) {
+    // add any necessary padding for alignment
+    literal_count = literal_count + (literal_count % 4);
+    *((sc_ushort*)&literals[(sc_int)literal_count]) = l;
+    literal_count = literal_count + 2;
+    return literal_count-2;
+}
+
+sc_ushort push_literal_8(sc_uchar l) {
+    literals[(sc_int)literal_count] = l;
+    literal_count = literal_count + 1;
+    return literal_count-1;
+}
+
+
+
 #define get_literal(offset) (literals[(sc_int)offset])
 
 #define push_instruction(i) (instructions[instruction_count++] = i)
@@ -449,7 +472,7 @@ sc_uint encode_operand(operand operand) {
         return operand.op_.operand_;
     }
     else if (operand.type_ == OP_Lit) {
-        return operand.op_.literal_ * sizeof(sc_int); // convert to byte offsets
+        return operand.op_.literal_ ; //* sizeof(sc_int); // convert to byte offsets
     }
     else if (operand.type_ == OP_Raw) {
         return operand.op_.literal_ ; 
@@ -749,10 +772,10 @@ sc_bool parse_literal(sc_ushort * lit_offset, sc_uint * return_not_push) {
             value = value * -1.0f;
         }
         if (return_not_push == NULL) {
-            lo = push_literal(value);
+            lo = push_literal_32( *((sc_uint*)(&value)) );
         }
         else {
-            *return_not_push = value;
+            *return_not_push = *((sc_uint*)(&value));
         }
     }
     else if (is_negative) {
@@ -760,17 +783,17 @@ sc_bool parse_literal(sc_ushort * lit_offset, sc_uint * return_not_push) {
         parse_int(digits, &value);
         value = value * -1;
         if (return_not_push == NULL) {
-            lo = push_literal(value);
+            lo = push_literal_32( *((sc_uint*)(&value)) );
         }
         else {
-            *return_not_push = value;
+            *return_not_push = *((sc_uint*)(&value));
         }
     }
     else {
         sc_uint value;
         parse_unsigned_int(digits, &value);
         if (return_not_push == NULL) {
-            lo = push_literal(value);
+            lo = push_literal_32(value);
         }
         else {
             *return_not_push = value;
@@ -1172,7 +1195,7 @@ sc_bool parse_instruction() {
                     }
                     case WORD: {
                         for (int i = 0; i < value_repeat; i++) {
-                            push_literal(value);
+                            push_literal_32(value);
                         }
                         break;
                     }

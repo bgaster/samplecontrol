@@ -1,6 +1,8 @@
 
 ; simple func and print string to console example
 
+@segment .code
+
 @func _print_str:
     MOVL R2 #0
     LDR R2 R2

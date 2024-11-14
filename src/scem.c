@@ -534,8 +534,9 @@ sc_bool run(sc_uint task_id, sc_bool screen_enabled) {
                 DEBUG("LDR\n");
                 sc_uint reg_dst = operand_one(i);
                 sc_uint reg_addr = operand_two(i);
-                if (reg_addr == 10 || reg_addr == 11)
-                    sc_print("%d\n", registers[reg_addr]);
+                if (reg_addr == 10 || reg_addr == 11) {
+                    sc_print("%d = %d\n", registers[reg_addr], *((sc_uint*)(&memory_pool_char[registers[reg_addr]])) );
+                }
                 registers[reg_dst] = *((sc_uint*)(&memory_pool_char[registers[reg_addr]]));
                 pc = pc + 1;
                 break;
