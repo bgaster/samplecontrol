@@ -426,7 +426,7 @@ sc_bool match_opcode(sc_char *op, opcode * dst_opcode) {
     // return false in the case that it is a stream instruction
     // these are handled seperatly and not allowed to appear in standard
     // instruction stream for assembler
-    if (scmp("STREAM", op, len) || scmp("ATTACH", op, len) || scmp("AWAIT", op, len)) {
+    if (scmp("STREAM", op, 6) || scmp("ATTACH", op, len) || scmp("AWAIT", op, len)) {
         return FALSE;
     }
 
@@ -1646,7 +1646,7 @@ sc_bool parse() {
                     current_segment = SEGMENT_DATA;
                 }
             }
-            else if (scmp(tl, "task", 4)) {
+            else if (scmp(tl, "task", 4) && current_segment != SEGMENT_NOT_SET) {
                 DEBUG("start task\n");
                 label_prefix[0] = '\0';
                 label* dst_label;
@@ -1660,7 +1660,7 @@ sc_bool parse() {
                     return FALSE;
                 }
             }
-            else if (scmp(tl, "func", 4)) {
+            else if (scmp(tl, "func", 4) && current_segment != SEGMENT_NOT_SET) {
                 DEBUG("start func\n");
                 label_prefix[0] = '\0';
                 label* dst_label;
@@ -1674,24 +1674,24 @@ sc_bool parse() {
                     return FALSE;
                 }
             }
-            else if (scmp(tl, "stream", 6)) {
+            else if (scmp(tl, "stream", 6) && current_segment != SEGMENT_NOT_SET) {
                 if (!parse_stream()) {
                     return FALSE;
                 }
             }
-            else if (scmp(tl, "attach", 6)) {
+            else if (scmp(tl, "attach", 6) && current_segment != SEGMENT_NOT_SET) {
                 DEBUG("start attach\n");
                 if (!parse_attach()) {
                     return FALSE;
                 }
             }
-            else if (scmp(tl, "await", 5)) {
+            else if (scmp(tl, "await", 5) && current_segment != SEGMENT_NOT_SET) {
                 DEBUG("start await\n");
                 sc_print("adding label ... %s\n", label_prefix);
                 instruction i = make_instruction(AWAIT, 0, NULL);
                 push_instruction(i);
             }
-            else if (scmp(tl, "entry", 4)) {
+            else if (scmp(tl, "entry", 4) && current_segment != SEGMENT_NOT_SET) {
                 // TODO: should we set prefix????
                 label_prefix[0] = '\0'; 
                 // check that there is only one entry !!

@@ -37,15 +37,12 @@ _exit_loop:
 @task _display:
 _start:
     ; initialize x,y position
-    MOVL R10 #50          ; x
-    LDR R10 R10
     MOVL R10 _x
     LDR R10 R10
-
-    MOVL R11 #50          ; y 
+    
     MOVL R11 _y
-    ;LDR R11 R11
     LDR R11 R11
+
 _start_after:
 
     ;@await SREAD R0 S0  ; wait until their is a mouse movement (x, y) 
@@ -81,7 +78,6 @@ _mousemotion:
     LDR R13 R13
     AND R10 R12 R13   ; R10 = (value >> 16) & 0xFFFF
     AND R11 R9  R13   ; R11  = value & 0xFFFF 
-
 _nomouse:
     ; draw a rectangle
     .Screen/move R10 R11

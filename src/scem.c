@@ -534,10 +534,15 @@ sc_bool run(sc_uint task_id, sc_bool screen_enabled) {
                 DEBUG("LDR\n");
                 sc_uint reg_dst = operand_one(i);
                 sc_uint reg_addr = operand_two(i);
-                if (reg_addr == 10 || reg_addr == 11) {
-                    sc_print("%d = %d\n", registers[reg_addr], *((sc_uint*)(&memory_pool_char[registers[reg_addr]])) );
-                }
                 registers[reg_dst] = *((sc_uint*)(&memory_pool_char[registers[reg_addr]]));
+                pc = pc + 1;
+                break;
+            }
+            case STR: {
+                DEBUG("STR\n");
+                sc_uint reg_addr = operand_one(i);
+                sc_uint reg_src = operand_two(i);
+                *((sc_uint*)(&memory_pool_char[registers[reg_addr]])) = registers[reg_src];
                 pc = pc + 1;
                 break;
             }
@@ -549,6 +554,7 @@ sc_bool run(sc_uint task_id, sc_bool screen_enabled) {
                 pc = pc + 1;
                 break;
             }
+            // other load and stores
             //SPAWN, YIELD, START,
             case SPAWN: {
                 DEBUG("SPAWN\n");
