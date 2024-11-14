@@ -10,22 +10,59 @@
 
 #include <util.h>
 
+#include <string.h> 
+
 sc_bool read(const char * filename);
 sc_bool parse();
 sc_bool emit(const char* filename);
 
 int main(int argc, char **argv) {
-    if(argc == 2 && scmp(argv[1], "-v", 2)) {
-        sc_print("scasm - SC Assembler, 21st Sept 2024.\n");
-        return 1;
+    sc_char * include_paths[64];
+    sc_uint num_include_paths = 0;
+    sc_char * input_file = NULL;
+    sc_char * output_file = NULL;
+
+    for (sc_int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-v") == 0) {
+            sc_print("scasm - SC Assembler, 21st Sept 2024.\n");
+            return 0;
+        } else if (strncmp(argv[i], "-I", 2) == 0) {
+            // Check if the filename is directly attached
+            if (strlen(argv[i]) > 2) {
+                include_paths[num_include_paths] = argv[i] + 2; // Skip "-I" part
+                num_include_paths++;
+            } else {
+                sc_error("ERROR: -I option requires a filename\n");
+                return 1;
+            }
+               
+            
+        } else {
+            if (input_file == NULL) {
+                input_file = argv[i];
+            }
+            else {
+                output_file = argv[i];
+            }
+        }
     }
-	if(argc != 3) {
-        sc_print("usage: scasm [-v] input.sc output.scrom");
+    
+    if (input_file == NULL || output_file == NULL) {
+        sc_error("ERROR: scasm - SC Assembler, 21st Sept 2024.\n");
         return 1;
     }
 
+    // if(argc == 2 && scmp(argv[1], "-v", 2)) {
+    //     sc_print("scasm - SC Assembler, 21st Sept 2024.\n");
+    //     return 1;
+    // }
+	// if(argc != 3) {
+    //     sc_print("usage: scasm [-v, -I<path>] input.sc output.scrom");
+    //     return 1;
+    // }
+
     // read file into buffer for processing
-    if (!read(argv[1])) {
+    if (!read(input_file)) {
         return 1;
     }
 
@@ -38,7 +75,7 @@ int main(int argc, char **argv) {
     //print_instructions();
     // print_constants();
 
-    if (!emit(argv[2])) {
+    if (!emit(output_file)) {
         return 1;
     }
 

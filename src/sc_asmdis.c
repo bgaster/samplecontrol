@@ -62,6 +62,7 @@ typedef struct {
 typedef struct {
     string name_;
     sc_int offset_;
+    sc_uint segment_;
 } label;
 
 typedef union {
@@ -258,10 +259,10 @@ enum { TL_Stream, TL_Task };
 // } toplevel;
 
 //-----------------------------------------------------------------------------------------------
-// Streams
+// Segments
 //-----------------------------------------------------------------------------------------------
 
-
+enum { SEGMENT_DATA, SEGMENT_TEXT, SEGMENT_NOT_SET };
 
 //-----------------------------------------------------------------------------------------------
 // Globals
@@ -278,6 +279,8 @@ static sc_int entry_point = ENTRY_NOTDEFINED;
 static sc_uint device_capabilities = 0;
 #define USE_DEVICE_CONSOLE 0x1
 #define USE_DEVICE_SCREEN (0x1 << 1) 
+
+static sc_uint current_segment = SEGMENT_NOT_SET;
 
 // instructions
 static instruction instructions[MAX_INSRUCTIONS];
@@ -415,6 +418,8 @@ sc_bool match_opcode(sc_char *op, opcode * dst_opcode) {
     return FALSE;
 }
 
+
+
 /**
  * @brief print instruction to stdout
  * 
@@ -497,6 +502,39 @@ void print_encode_instruction(sc_uint inst, char* prefix) {
 }
 
 //-----------------------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------------------------
+
+typedef struct {
+    sc_char str_[MAX_OPCODE_SIZE+1];
+    sc_int datacode_;
+} datacode;
+
+// these must be kept in the same order as datacodes[] below, otherwise
+// directly lookup will value. i.e. enum is used to index into datacodes[].
+enum {
+    BYTE, SHORT, WORD
+};
+
+const datacode datacodes[] = {
+    // Move registers and literals 
+    { "BYTE", BYTE }, { "SHORT", SHORT }, { "WORD", WORD},
+}; 
+
+sc_bool match_datacode(sc_char *op, datacode * dst_datacode) {
+    sc_int len = slen(op);
+
+    for (sc_int i = 0; i < sizeof(opcodes) / sizeof(opcode); i++) {
+        if (scmp(datacodes[i].str_, op, len)) {
+            if (dst_datacode) {
+                *dst_datacode = datacodes[i];
+            }
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+//-----------------------------------------------------------------------------------------------
 // DEVICES
 //-----------------------------------------------------------------------------------------------
 
@@ -523,7 +561,7 @@ enum {
  * @return pointer to constructed label
  */
 label* make_label(sc_char* l, sc_int loc) {
-    label lab = {{l, 0}, loc};
+    label lab = {{l, 0}, loc, current_segment};
     labels[label_count] = lab;
     return &labels[label_count++];
 }
@@ -660,10 +698,13 @@ sc_float parse_float(const char *str, sc_float *dst) {
 /**
  * @brief parse a literal
  * 
- * @param pointer to where offset into literal pool will be returned, if not null 
+ * @param pointer to where offset into literal pool will be returned, if not null. 
+ * @param if not null, then literal is returned rather than pushed to literal pool.
+ *        it will be returned as an unsigned int and this is just used in some speical
+ *        usecases.
  * @return true if successful, otherwise false.
  */
-sc_bool parse_literal(sc_ushort * lit_offset) {
+sc_bool parse_literal(sc_ushort * lit_offset, sc_uint * return_not_push) {
     strip_whitespace();
 
      // parse literal
@@ -707,18 +748,33 @@ sc_bool parse_literal(sc_ushort * lit_offset) {
         if (is_negative) {
             value = value * -1.0f;
         }
-        lo = push_literal(value);
+        if (return_not_push == NULL) {
+            lo = push_literal(value);
+        }
+        else {
+            *return_not_push = value;
+        }
     }
     else if (is_negative) {
         sc_int value;
         parse_int(digits, &value);
         value = value * -1;
-        lo = push_literal(value);
+        if (return_not_push == NULL) {
+            lo = push_literal(value);
+        }
+        else {
+            *return_not_push = value;
+        }
     }
     else {
         sc_uint value;
         parse_unsigned_int(digits, &value);
-        lo = push_literal(value);
+        if (return_not_push == NULL) {
+            lo = push_literal(value);
+        }
+        else {
+            *return_not_push = value;
+        }
     }
 
     if (lit_offset) {
@@ -829,7 +885,12 @@ sc_bool parse_label(label **dst_label, sc_bool should_be_definition) {
                 dst->offset_ = instruction_count;
             }
             else {
-                dst = make_label(lab, instruction_count);
+                if (current_segment == SEGMENT_TEXT) {
+                    dst = make_label(lab, instruction_count);
+                }
+                else {
+                    dst = make_label(lab, literal_count);
+                }
             }
         }
         else {
@@ -957,7 +1018,7 @@ sc_bool parse_operand(operand* dst_operand) {
         }
         else if (token == '#') {
             sc_ushort lo;
-            if (!parse_literal(&lo)) {
+            if (!parse_literal(&lo, NULL)) {
                 sc_error("ERROR: line(%d) invalid literal\n", line);
                 return FALSE;
             }
@@ -1023,6 +1084,7 @@ sc_bool parse_instruction() {
     op[op_length++] = '\0';
 
     opcode dst_opcode;
+    datacode dst_datacode;
     if (match_opcode(op, &dst_opcode)) {
         // now pass a instructions operands
         operand gen_operands[3];
@@ -1035,7 +1097,7 @@ sc_bool parse_instruction() {
             }
         }
         
-        sc_print("line(%d) %s %d\n", line, op, operand_count);
+        //sc_print("line(%d) %s %d\n", line, op, operand_count);
 
         // validate instruction's argments
         if (operand_count != dst_opcode.num_operands_) {
@@ -1051,7 +1113,7 @@ sc_bool parse_instruction() {
             }
         }
         else if (scmp(op, "MOVL", 4)) {
-            if (gen_operands[0].type_ != OP_Reg || gen_operands[1].type_ != OP_Lit) {
+            if (gen_operands[0].type_ != OP_Reg || (gen_operands[1].type_ != OP_Lit && gen_operands[1].type_ != OP_Label)) {
                 sc_error("ERROR: line(%d) invalid operands for %s\n", line, op);
                 return FALSE;
             }            
@@ -1095,6 +1157,33 @@ sc_bool parse_instruction() {
         instruction i = make_instruction(dst_opcode.opcode_, operand_count, gen_operands);
         push_instruction(i);
     }
+    else if (match_datacode(op, &dst_datacode)) {
+        // while (TRUE) {
+        sc_uint value_repeat;
+        if (parse_literal(NULL, &value_repeat)) {
+            sc_uint value;
+            if (parse_literal(NULL, &value)) {
+                switch(dst_datacode.datacode_) {
+                    case BYTE: {
+                        break;
+                    }
+                    case SHORT: {
+                        break;
+                    }
+                    case WORD: {
+                        for (int i = 0; i < value_repeat; i++) {
+                            push_literal(value);
+                        }
+                        break;
+                    }
+                    default: {
+                        sc_error("ERROR: line(%d) invalid  datacode %s\n", line, op);
+                        break;
+                    }
+                }
+            }
+        }
+    }
     else {
         sc_error("ERROR: line(%d) invalid opcode %s\n", line, op);
         return FALSE;
@@ -1122,7 +1211,7 @@ sc_bool parse_stream() {
     }
 
     sc_ushort lit_size_offset;
-    if (!parse_literal(&lit_size_offset)) {
+    if (!parse_literal(&lit_size_offset, NULL)) {
         sc_error("ERROR: line(%d) expected size\n", line);
         return FALSE;
     }
@@ -1158,7 +1247,7 @@ sc_bool parse_stream() {
 
     strip_whitespace();
     sc_ushort lit_continuous_offset;
-    if (!parse_literal(&lit_continuous_offset)) {
+    if (!parse_literal(&lit_continuous_offset, NULL)) {
         sc_error("ERROR: line(%d) expected continuous literal\n", line);
         return FALSE;
     }
@@ -1512,7 +1601,29 @@ sc_bool parse() {
                 token = *src_buffer++;
             }
             tl[tl_length] = '\0';
-            if (scmp(tl, "task", 4)) {
+            
+            // segments
+            if (scmp(tl, "segment", 7)) {
+                DEBUG("start segment\n");
+                strip_whitespace();
+
+                sc_char segment[MAX_TOPLEVEL_SIZE+1];
+                sc_int segment_length = 0;
+                //token = *src_buffer++;
+                while (token != ' ' && token != 0 && token != '\n' && segment_length <= MAX_TOPLEVEL_SIZE) {
+                    segment[segment_length++] = token;
+                    token = *src_buffer++;
+                }
+                segment[segment_length] = '\0';
+
+                if (scmp(segment, ".code", 5)) {
+                    current_segment = SEGMENT_TEXT;
+                }
+                else if (scmp(segment, ".data", 5)) {
+                    current_segment = SEGMENT_DATA;
+                }
+            }
+            else if (scmp(tl, "task", 4)) {
                 DEBUG("start task\n");
                 label_prefix[0] = '\0';
                 label* dst_label;

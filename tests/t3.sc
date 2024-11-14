@@ -1,4 +1,22 @@
+;@include "lib.sc"
+
 ; we really need a calling convention :-) :-)
+
+@segment .data
+_x: 
+  WORD #1 #50
+_y:
+  WORD #1 #100 
+
+; support for syscall style files
+; R1 is pointer to start of path/filename
+; MOVL R1 #"path/filename.slides"
+; MOVL R2 #0            ; O_RDONLY
+;.File/open R0 R1 R2    ; R0 = fd
+;.File/read R1 R0
+;.File/close R0
+
+@segment .code
 
 ; routine to print string to console
 @func _print_str:
@@ -19,9 +37,14 @@ _exit_loop:
 @task _display:
 _start:
     ; initialize x,y position
-    MOVL R10 #100          ; x
+    MOVL R10 #50          ; x
     LDR R10 R10
-    MOVL R11 #100          ; y 
+    MOVL R10 _x
+    LDR R10 R10
+
+    MOVL R11 #50          ; y 
+    MOVL R11 _y
+    ;LDR R11 R11
     LDR R11 R11
 _start_after:
 
