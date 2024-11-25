@@ -140,7 +140,7 @@ enum {
 enum { 
     SCREEN_RESIZE=0, SCREEN_PIXEL, SCREEN_FILL, SCREEN_RECT, 
     SCREEN_BLIT, SCREEN_PALETTE, SCREEN_BEGIN, SCREEN_END, SCREEN_COLOUR,
-    SCREEN_MOVE,
+    SCREEN_MOVE, SCREEN_FONT, SCREEN_TEXT,
 };
 
 //---------------------------------------------------------------------------------------------
@@ -241,6 +241,11 @@ static inline void stack_push(sc_uint *s, sc_uint *top, sc_uint v) {
 static inline sc_uint stack_pop(sc_uint *s, sc_uint *top) {
     sc_uint v = s[*top];
     *top = *top - 1;
+    return v;
+}
+
+static inline sc_uint stack_peep(sc_uint *s, sc_uint *top) {
+    sc_uint v = s[*top];
     return v;
 }
 
@@ -668,6 +673,23 @@ sc_bool run(sc_uint task_id, sc_bool screen_enabled) {
                         sc_uint x = registers[reg_x];
                         sc_uint y = registers[reg_y];
                         screen_move(x,y);
+                        break;
+                    }
+                    case SCREEN_FONT: {
+                        sc_uint reg_index = operand_two(i);
+                        sc_uint reg_filename = operand_three(i);
+                        sc_uint index = registers[reg_index];
+                        sc_char* filename = (sc_char*)(&memory_pool_char[registers[reg_filename]]);
+                        sc_ushort point = (sc_ushort)stack_peep(s, &top);
+                        screen_font(index, filename, point);
+                        break;
+                    }
+                    case SCREEN_TEXT: {
+                        sc_uint reg_index = operand_two(i);
+                        sc_uint reg_str = operand_three(i);
+                        sc_uint index = registers[reg_index];
+                        sc_char* str = (sc_char*)(&memory_pool_char[registers[reg_str]]);
+                        screen_text(index, str);
                         break;
                     }
                     default: {

@@ -39,8 +39,10 @@ void screen_move(sc_ushort x, sc_ushort y);
 void screen_colour(sc_uchar index);
 void screen_blit(sc_ushort x1, sc_ushort y1, sc_ushort x2, sc_ushort y2, sc_uchar *pixels);
 void screen_palette(void);
-void screen_resize(sc_ushort width, sc_ushort height, int scale);
+void screen_resize(sc_ushort width, sc_ushort height, sc_int scale);
 void screen_redraw(void);
+void screen_font(sc_ushort index, const sc_char * path, sc_ushort point);
+void screen_text(sc_ushort index, const sc_char * str);
 
 /**
  * @brief deinitialize screen device

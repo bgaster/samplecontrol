@@ -330,9 +330,11 @@ sc_ushort push_string_literal(sc_char *src, sc_int len) {
     mcopy(src, (sc_char*)(literals+literal_count), len);
 
     *(((sc_char*)(literals+literal_count))+len) = '\0';
+    sc_print("%s = %d %d\n", (sc_char*)(literals+literal_count), len, literal_count);
     len = len + 1;
     // inc literal count, making sure to pad 4-byte alignment, if necessary
-    literal_count = literal_count + ((len+1)/4) + ((len+1) % 4 > 0 ? 1 : 0);
+    literal_count = literal_count + len ; //((len+1)/4) + ((len+1) % 4 > 0 ? 1 : 0);
+    sc_print("%d\n", literal_count);
 
     return literal_count_tmp;
 }
@@ -567,7 +569,7 @@ sc_bool match_datacode(sc_char *op, datacode * dst_datacode) {
 enum { 
     SCREEN_RESIZE=0, SCREEN_PIXEL, SCREEN_FILL, SCREEN_RECT, 
     SCREEN_BLIT, SCREEN_PALETTE, SCREEN_BEGIN, SCREEN_END, SCREEN_COLOUR,
-    SCREEN_MOVE,
+    SCREEN_MOVE, SCREEN_FONT, SCREEN_TEXT,
 };
 
 //-----------------------------------------------------------------------------------------------
@@ -821,7 +823,7 @@ sc_bool parse_string_literal(sc_ushort * lit_offset) {
     
     sc_char * string_start = src_buffer;
 
-    sc_char buffer[1024];
+    sc_char buffer[2048];
     sc_int buffer_count = 0;
 
     while (token != '"' && token != 0 && token != '\n') {
@@ -1530,6 +1532,65 @@ sc_bool parse_screen() {
         instruction i = make_instruction(SCREEN, 3, operands);
         push_instruction(i);
 
+    } else if (scmp(func, "font", 4)) {
+        operand operand_two;
+        if (!parse_operand(&operand_two)) {    
+            sc_error("ERROR: line(%d) expected operand\n", line);
+            return FALSE;
+        }
+
+        operand operand_three;
+        if (!parse_operand(&operand_three)) {    
+            sc_error("ERROR: line(%d) expected operand\n", line);
+            return FALSE;
+        }
+
+        // operand operand_stack;
+        // if (!parse_operand(&operand_stack)) {    
+        //     sc_error("ERROR: line(%d) expected operand\n", line);
+        //     return FALSE;
+        // }
+
+        operand operand_one;
+        operand_one.type_ = OP_Raw;
+        operand_one.op_.literal_ = SCREEN_FONT;
+
+        operand operands[3];
+        operands[0] = operand_one;
+        operands[1] = operand_two;
+        operands[2] = operand_three;
+
+        // instruction i = make_instruction(PUSH, 1, &operand_stack);
+        // push_instruction(i);
+        instruction i = make_instruction(SCREEN, 3, operands);
+        push_instruction(i);
+        // i = make_instruction(POP, 1, &operand_stack);
+        // push_instruction(i);
+
+    } else if (scmp(func, "text", 4)) {
+        operand operand_two;
+        if (!parse_operand(&operand_two)) {    
+            sc_error("ERROR: line(%d) expected operand\n", line);
+            return FALSE;
+        }
+
+        operand operand_three;
+        if (!parse_operand(&operand_three)) {    
+            sc_error("ERROR: line(%d) expected operand\n", line);
+            return FALSE;
+        }
+
+        operand operand_one;
+        operand_one.type_ = OP_Raw;
+        operand_one.op_.literal_ = SCREEN_TEXT;
+
+        operand operands[3];
+        operands[0] = operand_one;
+        operands[1] = operand_two;
+        operands[2] = operand_three;
+
+        instruction i = make_instruction(SCREEN, 3, operands);
+        push_instruction(i);
     } else if (scmp(func, "colour", 6)) {
         operand operand_two;
         if (!parse_operand(&operand_two)) {    

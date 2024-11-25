@@ -6,7 +6,9 @@
 _x: 
   WORD #1 #50
 _y:
-  WORD #1 #100 
+  WORD #1 #100
+_font14:
+  WORD #1 #0
 
 ; support for syscall style files
 ; R1 is pointer to start of path/filename
@@ -88,6 +90,15 @@ _nomouse:
     LDR R0 R0
     .Screen/rect R0 R0
 
+    ; display message
+    MOVL R21 #50
+    LDR R21 R21
+    .Screen/move R21 R21
+    MOVL R0 "draw some text"
+    MOVL R1 #0                    ; font 0 (there are 9 possible font slots)
+    LDR R1 R1
+    .Screen/text R1 R0
+
     .Screen/end         ; end painting
     YIELD
     JMP _start_after          ; begin again
@@ -108,6 +119,20 @@ _nomouse:
     MOVL R1 #480
     LDR R1 R1
     .Screen/resize R0 R1
+
+    ; load font... (14pt square.ttf in black)
+    MOVL R2 #0                    ; colour index (black) 
+    LDR R2 R2
+    .Screen/colour R2
+    MOVL R0 "./assets/square.ttf"
+    MOVL R1 #0                    ; font 0 (there are 9 possible font slots)
+    LDR R1 R1
+    MOVL R2 #14                   ; 14pt
+    LDR R2 R2
+    PUSH R2                       ; pt parameter is passed on stack
+    .Screen/font R1 R0 ; screens_font(R1, R0, R2)
+    POP R2
+
     MOVL R0 "initialization complete\n"
     CALL _print_str
     RET

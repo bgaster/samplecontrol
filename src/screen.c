@@ -1,11 +1,13 @@
-#include <raylib.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_timer.h>
+#include "SDL_FontCache.h"
 
 #include <screen.h>
 
 //#if defined(__DESKTOP__)
+
+//-------------------------------------------------------------------------------------
 
 typedef struct {
     unsigned char red_;
@@ -23,12 +25,23 @@ static colour colour_pallet[16] = {
     0 
 };
 
+//-------------------------------------------------------------------------------------
+
+#define MAX_FONTS 9
+
+static FC_Font* fonts[MAX_FONTS] = { 0 };
+
+static sc_int number_fonts = 0;
+
+//-------------------------------------------------------------------------------------
+
 static sc_int window_width = 400;
 static sc_int window_height = 400;
 static SDL_Window* window = NULL;
 static SDL_Renderer* renderer = NULL;
 static sc_short screen_x = 0;
 static sc_short screen_y = 0;
+static sc_uchar colour_index = 0;
 static sc_bool quit = FALSE;
 static sc_queue *mouse_queue = NULL;
 static sc_int mouse_x = 0;
@@ -97,6 +110,7 @@ void screen_fill() {
 }
 
 void screen_colour(sc_uchar index) {
+    colour_index = index;
     colour c = colour_pallet[index];
     SDL_SetRenderDrawColor( renderer, c.red_, c.green_, c.blue_, 255 ); 
 }
@@ -125,7 +139,6 @@ void screen_palette(void) {
 }
 
 void screen_resize(sc_ushort width, sc_ushort height, int scale) {
-    sc_print("resize frame\n");
     window_width = width;
     window_height = height;
     mouse_x = 0; // window_width / 2;
@@ -137,6 +150,20 @@ void screen_resize(sc_ushort width, sc_ushort height, int scale) {
 
 void screen_redraw(void) {
 
+}
+
+void screen_font(sc_ushort index, const sc_char * filename, sc_ushort point) {
+    if (index >= 0 && index < MAX_FONTS) {
+        FC_Font* font = FC_CreateFont();
+        colour c = colour_pallet[colour_index];
+        FC_LoadFont(
+            font, renderer, filename, point, FC_MakeColor(c.red_,c.green_,c.blue_,255), TTF_STYLE_NORMAL);
+        fonts[index] = font;
+    }
+}
+
+void screen_text(sc_ushort index, const sc_char * str) {
+    FC_Draw(fonts[index], renderer, screen_x, screen_y, str);
 }
 
 sc_bool screen_process_events() {
@@ -174,6 +201,11 @@ sc_bool screen_process_events() {
                     enqueue(mouse_queue, v);
                 }
                 break;
+                // top 2 bits 
+                // 00 => mouse motion
+                // 01 => reserved
+                // 10 => button press
+                // 11 => keyboard 
             }
             default:
                 break;    

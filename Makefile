@@ -22,7 +22,8 @@ RAY_LINKCMDS =  -lraylib -framework CoreVideo -framework OpenGL -framework IOKit
 				-framework Cocoa -framework Carbon  -lm -lpthread -ldl -lglfw3
 
 SDL_CFLAGS = -I/opt/homebrew/include/ -D_THREAD_SAFE
-SDL_LDFLAGS = -L/opt/homebrew/lib -lSDL2 -lSDL2_ttf 
+SDL_LDFLAGS = -L/opt/homebrew/lib -lSDL2 -lSDL2_ttf -lSDL2_image \
+              -lfreetype -lpng -lwebp -ltiff -ljpeg -lbz2 -lz
 
 CFLAGS += -I$(RAYLIB_INCLUDE_PATH) -D__DESKTOP__
 
@@ -44,6 +45,7 @@ SCEM_SOURCES =		src/scem.c \
 					src/console.c \
 					src/screen.c \
 					src/util.c \
+					src/SDL_FontCache.c \
 					src/lfqueue.c
 
 SCASM_HEADERS = 	include/util.h
