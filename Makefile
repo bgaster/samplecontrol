@@ -44,6 +44,7 @@ SCDIS_SOURCES =		src/scdis.c \
 SCEM_SOURCES =		src/scem.c \
 					src/console.c \
 					src/screen.c \
+					src/file.c \
 					src/util.c \
 					src/SDL_FontCache.c \
 					src/lfqueue.c
